@@ -19,9 +19,9 @@
 import { CircularProgress, MenuItem, PageContent, Select } from '@wso2/oxygen-ui';
 import { ScrollText } from '@wso2/oxygen-ui-icons-react';
 import { useMemo, useState, type JSX } from 'react';
-import { useOrgs, useProjectsByOrg, useComponents, useEnvironments, useAllEnvironments, useCloudDataPlanes } from '../api/queries';
+import { useOrgs, useProjectsByOrg, useComponents, useEnvironments, useAllEnvironments } from '../api/queries';
 import { useInfiniteLogs, type LogsRequest } from '../api/logs';
-import { choreologgingProjectLogsApiUrl } from '../config/api';
+import { observabilityLogsApiUrl } from '../paths';
 import { AUTO_FETCH_INTERVAL, DEFAULT_DP_REGION, PAGE_SIZE } from '../utils/logs';
 import LogsFilters from '../components/Logs/LogsFilters';
 import LogsPageLayout from '../components/Logs/LogsPageLayout';
@@ -49,8 +49,6 @@ export default function RuntimeLogsProject(scope: ProjectScope): JSX.Element {
   const environments = orgUuid ? projectEnvs : globalEnvs;
   const loadingEnvironments = orgUuid ? loadingProjectEnvs : loadingGlobalEnvs;
 
-  const { data: cdps, isLoading: loadingCdps } = useCloudDataPlanes(orgUuid);
-
   const [integrationFilter, setIntegrationFilter] = useState('all');
 
   const componentIds = integrationFilter !== 'all' ? [integrationFilter] : allComponents.map((c) => c.id);
@@ -61,11 +59,7 @@ export default function RuntimeLogsProject(scope: ProjectScope): JSX.Element {
   const envIdsKey = selectedEnvIds.join(',');
   const levelFilterKey = levelFilter.join(',');
 
-  const logsApiUrl = useMemo(() => {
-    if (!primaryEnv?.dpId || !cdps) return undefined;
-    const cdp = cdps.find((c) => c.id.toLowerCase() === primaryEnv.dpId!.toLowerCase());
-    return cdp ? choreologgingProjectLogsApiUrl(cdp.external_gateway_virtual_host) : undefined;
-  }, [primaryEnv?.dpId, cdps]);
+  const logsApiUrl = observabilityLogsApiUrl();
 
   const logsRequest = useMemo<LogsRequest | null>(() => {
     if (componentIds.length === 0 || !primaryEnv || !logsApiUrl) return null;
@@ -89,7 +83,7 @@ export default function RuntimeLogsProject(scope: ProjectScope): JSX.Element {
 
   const logs = useMemo(() => data?.pages.flat() ?? [], [data]);
 
-  if (loadingProject || loadingComponents || loadingEnvironments || loadingCdps) {
+  if (loadingProject || loadingComponents || loadingEnvironments) {
     return (
       <PageContent sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
         <CircularProgress />

@@ -16,10 +16,16 @@
  * under the License.
  */
 
-import { authenticatedFetch } from '../auth/tokenManager';
+import { graphqlApiUrl } from '../config/api';
 
+/**
+ * Send a GraphQL request through the ipaas-service BFF proxy.
+ * The BFF injects the upstream Bearer token automatically; the browser
+ * only needs to include the session cookie / Asgardeo token, which the
+ * SDK manages and injects via the Authorization header on every fetch.
+ */
 export async function gql<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
-  const res = await authenticatedFetch(window.API_CONFIG.graphqlUrl, {
+  const res = await fetch(graphqlApiUrl(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query, variables }),

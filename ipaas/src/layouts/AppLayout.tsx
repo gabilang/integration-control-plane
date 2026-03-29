@@ -52,12 +52,10 @@ import { useNavigate, Outlet, NavLink } from 'react-router';
 import Logo from '../components/Logo';
 import { BarChart3, Bell, ChevronDown, ChevronRight, Layers, LayoutDashboard, LogOut, Plus, ScrollText, Search, Server, Shield, Sliders, User as UserIcon, X } from '@wso2/oxygen-ui-icons-react';
 import { useProject, useProjectByHandler, useProjects, useComponents, useOrgs } from '../api/queries';
-import { fetchOrgPermissions } from '../api/auth';
-import { authenticatedFetch, switchOrgToken } from '../auth/tokenManager';
 import { mockNotifications } from '../mock-data/mockNotifications';
 import { useScope, useResource, resourceUrl, broaden, narrow, newProjectUrl, newComponentUrl, sidebarItems, hasProject, hasComponent, type Resource } from '../nav';
-import { cookiePolicyUrl, loginUrl, orgHomeUrl, privacyPolicyUrl, profileUrl, projectHomeUrl } from '../paths';
-import { useAuth } from '../auth/AuthContext';
+import { cookiePolicyUrl, orgHomeUrl, privacyPolicyUrl, profileUrl, projectHomeUrl } from '../paths';
+import { useAsgardeo } from '../auth';
 import { useAccessControl } from '../contexts/AccessControlContext';
 import { ALL_USER_MGT_PERMISSIONS, Permissions } from '../constants/permissions';
 
@@ -84,7 +82,9 @@ export default function AppLayout(): JSX.Element {
   const resource = useResource();
 
   const queryClient = useQueryClient();
-  const { username, displayName, logout, userId, isOidcUser } = useAuth();
+  const { user, signOut } = useAsgardeo();
+  const username = user?.username ?? '';
+  const displayName = user?.displayName ?? (user as Record<string, unknown> | null)?.name as string ?? '';
   const { hasAnyPermission, setOrgPermissions } = useAccessControl();
 
   const { state: shell, actions } = useAppShell({ initialCollapsed: true });
@@ -147,46 +147,13 @@ export default function AppLayout(): JSX.Element {
     return '';
   };
 
+  // All users authenticate via Thunder OIDC — grant all ICP permissions at org level
   const orgPermsLoadedRef = useRef('');
   useEffect(() => {
-    if (!userId || !scope.org || orgPermsLoadedRef.current === scope.org) return;
+    if (!scope.org || orgPermsLoadedRef.current === scope.org) return;
     orgPermsLoadedRef.current = scope.org;
-    if (isOidcUser) {
-      // OIDC users are authorized via Choreo STS — grant all ICP permissions locally
-      setOrgPermissions(Object.values(Permissions));
-      return;
-    }
-    fetchOrgPermissions(scope.org, userId)
-      .then((data) => setOrgPermissions(data.permissionNames))
-      .catch(() => setOrgPermissions([]));
-  }, [scope.org, userId, isOidcUser, setOrgPermissions]);
-
-  // Recover org numeric ID if it was not saved during OIDC callback (e.g. old sessions)
-  const [, setOrgIdVersion] = useState(0);
-  const orgIdFetchedRef = useRef(false);
-  useEffect(() => {
-    if (!isOidcUser || !userId || window.API_CONFIG.asgardeoOrgNumericId || orgIdFetchedRef.current) return;
-    orgIdFetchedRef.current = true;
-    authenticatedFetch(`${window.API_CONFIG.choreoOrgApiUrl}/orgs`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!data) return;
-        const orgs: Array<{ handle?: string; orgHandle?: string; org_handle?: string; id?: string | number; orgId?: string | number }> = data.list ?? data.organizations ?? (Array.isArray(data) ? data : []);
-        for (const org of orgs) {
-          const numericId = org.id ?? org.orgId;
-          if (numericId) {
-            const parsedId = typeof numericId === 'string' ? parseInt(numericId, 10) : numericId;
-            if (!isNaN(parsedId) && parsedId > 0) {
-              window.API_CONFIG.asgardeoOrgNumericId = parsedId;
-              localStorage.setItem('icp_org_numeric_id', String(parsedId));
-              setOrgIdVersion((v) => v + 1); // trigger re-render so queries re-evaluate orgId()
-            }
-            break;
-          }
-        }
-      })
-      .catch(() => {});
-  }, [isOidcUser, userId]);
+    setOrgPermissions(Object.values(Permissions));
+  }, [scope.org, setOrgPermissions]);
 
   // Find component UUID for permission checks
   const currentComponent = hasComponent(scope) ? components.find((c) => c.handler === scope.component) : undefined;
@@ -318,16 +285,8 @@ export default function AppLayout(): JSX.Element {
                         navigate(orgHomeUrl(o.handle));
                         return;
                       }
-                      switchOrgToken(o.handle)
-                        .then(() => {
-                          if (o.numericId > 0) {
-                            window.API_CONFIG.asgardeoOrgNumericId = o.numericId;
-                            localStorage.setItem('icp_org_numeric_id', String(o.numericId));
-                          }
-                          queryClient.clear();
-                          navigate(orgHomeUrl(o.handle));
-                        })
-                        .catch(() => navigate(orgHomeUrl(o.handle)));
+                      queryClient.clear();
+                      navigate(orgHomeUrl(o.handle));
                     }}>
                     {o.handle}
                   </MenuItem>
@@ -793,8 +752,7 @@ export default function AppLayout(): JSX.Element {
             <Button
               variant="contained"
               onClick={async () => {
-                await logout();
-                navigate(loginUrl());
+                await signOut();
                 setConfirmDialogOpen(false);
               }}>
               Sign Out

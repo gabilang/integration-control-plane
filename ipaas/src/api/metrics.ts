@@ -18,7 +18,6 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { observabilityMetricsApiUrl } from '../paths';
-import { authenticatedFetch } from '../auth/tokenManager';
 
 export interface MetricsRequest {
   componentId?: string;
@@ -52,7 +51,7 @@ export interface MetricsResponse {
 }
 
 async function fetchMetrics(req: MetricsRequest): Promise<MetricsResponse> {
-  const res = await authenticatedFetch(observabilityMetricsApiUrl(), {
+  const res = await fetch(observabilityMetricsApiUrl(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),

@@ -1,0 +1,54 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+*.test
+*.out
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Build artifacts
+build/
+dist/
+
+# Build tools
+build-tools/
+
+# Environment files
+.env
+.env.local
+*.env
+
+# Logs
+logs/
+*.log
+
+# Certificates
+/certs/
+*.pem
+*.key
+*.crt
+
+# Process IDs
+*.pid
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Test coverage
+coverage.out
+coverage.html
+
+# Temporary files
+tmp/
+temp/

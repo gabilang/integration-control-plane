@@ -3,12 +3,10 @@
  * Navigation for the main matrix pages is handled by src/nav.ts.
  */
 
+import { observabilityApiUrl } from './config/api';
+
 export function loginUrl(): string {
   return '/login';
-}
-
-export function oidcCallbackUrl(): string {
-  return '/signin';
 }
 
 export function profileUrl(): string {
@@ -21,10 +19,6 @@ export function privacyPolicyUrl(): string {
 
 export function cookiePolicyUrl(): string {
   return '/cookie-policy';
-}
-
-export function forceChangePasswordUrl(): string {
-  return '/change-password';
 }
 
 // ---------------------------------------------------------------------------
@@ -198,15 +192,40 @@ export const support = {
 // API URLs
 // ---------------------------------------------------------------------------
 
-// Re-export from config/api for backward compatibility
+// Re-export BFF URL helpers for use in api modules
 // ---------------------------------------------------------------------------
 
-export { loginApiUrl, refreshTokenApiUrl, revokeTokenApiUrl, oidcAuthorizeApiUrl, oidcCallbackApiUrl, changePasswordApiUrl, forceChangePasswordApiUrl } from './config/api';
+export { graphqlApiUrl, authApiUrl, observabilityApiUrl } from './config/api';
 
-// Logs URL helper
-export const observabilityLogsApiUrl = (): string => window.API_CONFIG.observabilityUrl + '/logs?live=true';
-// Metrics URL helper
-export const observabilityMetricsApiUrl = (): string => window.API_CONFIG.observabilityUrl + '/metrics';
+// ---------------------------------------------------------------------------
+// Legacy API URL helpers — used by AuthContext.tsx / tokenManager.ts.
+// Preserved for future use; not active in the Thunder IdP auth flow.
+// ---------------------------------------------------------------------------
+
+export function loginApiUrl(): string {
+  return `${window.API_CONFIG?.authBaseUrl ?? ''}/auth/login`;
+}
+
+export function refreshTokenApiUrl(): string {
+  return `${window.API_CONFIG?.authBaseUrl ?? ''}/auth/refresh`;
+}
+
+export function revokeTokenApiUrl(): string {
+  return `${window.API_CONFIG?.authBaseUrl ?? ''}/auth/revoke`;
+}
+
+export function oidcCallbackUrl(): string {
+  return '/signin';
+}
+
+export function forceChangePasswordUrl(): string {
+  return '/change-password';
+}
+
+// Logs URL helper (via BFF observability proxy)
+export const observabilityLogsApiUrl = (): string => observabilityApiUrl() + '/logs?live=true';
+// Metrics URL helper (via BFF observability proxy)
+export const observabilityMetricsApiUrl = (): string => observabilityApiUrl() + '/metrics';
 
 // ---------------------------------------------------------------------------
 // WSDL/SOAP namespace constants

@@ -19,50 +19,31 @@
 import { useEffect } from 'react';
 import type { JSX } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router';
-import { useAuth } from './AuthContext';
+import { useAsgardeo } from './index';
 import { useAccessControl } from '../contexts/AccessControlContext';
-import { fetchOrgPermissions } from '../api/auth';
-import { loginUrl, forceChangePasswordUrl } from '../paths';
-import { saveRedirectUrl } from './tokenManager';
+import { loginUrl } from '../paths';
 import { Permissions } from '../constants/permissions';
 
 export default function ProtectedRoute(): JSX.Element {
-  const { isAuthenticated, userId, requirePasswordChange, isOidcUser } = useAuth();
+  const { isSignedIn, isLoading } = useAsgardeo();
   const { setOrgPermissions } = useAccessControl();
   const { pathname } = useLocation();
 
   useEffect(() => {
-    if (!isAuthenticated || !userId) {
+    if (!isSignedIn) {
       setOrgPermissions([]);
       return;
     }
+    // All Thunder-authenticated users receive full org-level permissions.
+    // Fine-grained access control is enforced at the BFF layer.
+    setOrgPermissions(Object.values(Permissions));
+  }, [isSignedIn, pathname, setOrgPermissions]);
 
-    if (isOidcUser) {
-      // OIDC users are authorized by Choreo/Asgardeo with an org-scoped STS token.
-      // The local ICP permission backend does not apply — grant all ipass permissions.
-      setOrgPermissions(Object.values(Permissions));
-      return;
-    }
+  // Show nothing while the SDK determines auth state
+  if (isLoading) return <></>;
 
-    // For local-auth users, extract the org handle from the current URL path.
-    // Skip fetching on non-org routes (e.g. /profile, /change-password).
-    const orgMatch = pathname.match(/^\/organizations\/([^/]+)/);
-    if (!orgMatch) return;
-    fetchOrgPermissions(orgMatch[1], userId)
-      .then((data) => setOrgPermissions(data.permissionNames))
-      .catch((err) => {
-        setOrgPermissions([]);
-        console.error('Failed to fetch org permissions', err);
-      });
-  }, [isAuthenticated, userId, isOidcUser, pathname, setOrgPermissions]);
-
-  if (!isAuthenticated) {
-    saveRedirectUrl(window.location.href);
+  if (!isSignedIn) {
     return <Navigate to={loginUrl()} replace />;
-  }
-
-  if (requirePasswordChange && pathname !== forceChangePasswordUrl()) {
-    return <Navigate to={forceChangePasswordUrl()} replace />;
   }
 
   return <Outlet />;

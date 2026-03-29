@@ -16,10 +16,10 @@
  * under the License.
  */
 
-import { authenticatedFetch } from '../auth/tokenManager';
+import { authApiUrl } from '../config/api';
 
 async function authFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await authenticatedFetch(`${window.API_CONFIG.authBaseUrl}${path}`, {
+  const res = await fetch(`${authApiUrl()}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',

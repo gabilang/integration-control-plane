@@ -20,7 +20,7 @@ import { useState } from 'react';
 import type { JSX } from 'react';
 import { Alert, Avatar, Box, Button, Card, CardContent, Chip, CircularProgress, Divider, IconButton, InputAdornment, InputLabel, OutlinedInput, Stack, Typography } from '@wso2/oxygen-ui';
 import { Eye, EyeOff } from '@wso2/oxygen-ui-icons-react';
-import { useAuth } from '../auth/AuthContext';
+import { useAsgardeo } from '../auth';
 import { useCurrentUser, useChangePassword } from '../api/authQueries';
 
 function getInitials(name: string): string {
@@ -34,8 +34,10 @@ function getInitials(name: string): string {
 }
 
 export default function Profile(): JSX.Element {
-  const { userId, username, displayName, isOidcUser } = useAuth();
-  const { data: user, isLoading } = useCurrentUser('default', userId);
+  const { user: authUser } = useAsgardeo();
+  const username = authUser?.username ?? '';
+  const displayName = authUser?.displayName ?? (authUser as Record<string, unknown> | null)?.name as string ?? '';
+  const { data: user, isLoading } = useCurrentUser('default', username);
 
   if (isLoading) {
     return <CircularProgress sx={{ display: 'block', mx: 'auto', my: 8 }} />;
@@ -85,7 +87,6 @@ export default function Profile(): JSX.Element {
         </CardContent>
       </Card>
 
-      {!isOidcUser && <ChangePasswordSection />}
     </Box>
   );
 }

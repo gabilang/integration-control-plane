@@ -1,0 +1,11 @@
+apiVersion: openchoreo.dev/v1alpha1
+
+metadata:
+  name: integration-platform-api-service
+
+endpoints:
+  - name: integration-platform-api-http
+    visibility:
+      - external
+    port: 8080
+    type: REST

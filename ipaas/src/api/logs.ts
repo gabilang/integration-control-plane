@@ -17,7 +17,6 @@
  */
 
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { authenticatedFetch } from '../auth/tokenManager';
 
 export interface LogsRequest {
   projectId: string;
@@ -90,7 +89,7 @@ const COLUMN_MAP: Record<string, keyof LogRow> = {
 };
 
 async function postLogs(url: string, body: unknown): Promise<LogRow[]> {
-  const res = await authenticatedFetch(url, {
+  const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
