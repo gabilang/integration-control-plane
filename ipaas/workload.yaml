@@ -1,0 +1,11 @@
+apiVersion: openchoreo.dev/v1alpha1
+
+metadata:
+  name: ipaas-console
+
+endpoints:
+  - name: ipaas-console-http
+    visibility:
+      - external
+    port: 3000
+    type: HTTP
