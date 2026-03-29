@@ -22,6 +22,7 @@ import { authenticatedFetch, refreshAccessToken } from '../auth/tokenManager';
 import type { GqlArtifact, GqlComponent, GqlEnvironment, GqlProject, SchemaConfigItem } from './queries';
 import { toBackendArtifactType } from './artifactToggleMutations';
 import type { DeployComponentInput, UpdateBuildpackConfigsInput } from '../types/build';
+import { env } from '../config/env';
 
 export interface CreateProjectInput {
   name: string;
@@ -55,7 +56,7 @@ export function useCreateProject() {
         description: input.description,
         projectHandler: input.handler,
         orgHandler: input.orgHandler,
-        orgId: window.API_CONFIG.asgardeoOrgNumericId,
+        orgId: env.ICP_ORG_NUMERIC_ID,
       }).then((d) => d.createProject),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
   });
@@ -185,7 +186,7 @@ export function useCreateComponent() {
           name: input.name,
           displayName: input.displayName,
           description: input.description,
-          orgId: window.API_CONFIG.asgardeoOrgNumericId,
+          orgId: env.ICP_ORG_NUMERIC_ID,
           orgHandler: input.orgHandler,
           projectId: input.projectId,
           componentType: input.componentType,

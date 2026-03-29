@@ -19,11 +19,11 @@
 import { Navigate, Outlet } from 'react-router';
 import { Box, ColorSchemeToggle, Layout, ParticleBackground, Stack } from '@wso2/oxygen-ui';
 import type { JSX } from 'react';
-import { useAuth } from '../auth/AuthContext';
+import { useAsgardeo } from '../auth';
 import { orgUrl } from '../paths';
 
 export default function PublicLayout(): JSX.Element {
-  const { isAuthenticated } = useAuth();
+  const { isSignedIn: isAuthenticated } = useAsgardeo();
 
   if (isAuthenticated) {
     return <Navigate to={orgUrl('default')} replace />;

@@ -21,7 +21,7 @@ import { ArrowLeft, Plus, Trash2 } from '@wso2/oxygen-ui-icons-react';
 import { useState, useCallback, type JSX } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import SearchField from '../components/SearchField';
-import { useAuth } from '../auth/AuthContext';
+import { useAsgardeo } from '../auth';
 import { useAccessControl } from '../contexts/AccessControlContext';
 import { Permissions } from '../constants/permissions';
 import { useUsers, useGroups, useUpdateUserGroups, useRemoveUserFromGroup } from '../api/authQueries';
@@ -74,7 +74,8 @@ function AssignGroupsDialog({ orgHandler, user, onClose, onAssigned }: { orgHand
 }
 
 function UserDetailView({ orgHandler, user, onBack }: { orgHandler: string; user: User; onBack: () => void }) {
-  const { username: currentUsername } = useAuth();
+  const { user: authUser } = useAsgardeo();
+  const currentUsername = authUser?.username ?? '';
   const { hasOrgPermission } = useAccessControl();
   const canManageUsers = hasOrgPermission(Permissions.USER_MANAGE_USERS);
   const isSelf = user.username === currentUsername;

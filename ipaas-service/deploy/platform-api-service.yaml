@@ -1,0 +1,74 @@
+apiVersion: openchoreo.dev/v1alpha1
+kind: Component
+metadata:
+  name: integration-platform-api-service
+spec:
+  owner:
+    projectName: devant
+
+  componentType: deployment/service
+
+  autoDeploy: true
+
+  parameters:
+    exposed: true
+    port: 8080
+
+  # Component Workflow configuration
+  workflow:
+    name: docker
+
+    systemParameters:
+      repository:
+        url: "https://github.com/gabilang/integration-platform"
+        revision:
+          branch: "main"
+        appPath: "/integration-platform-service"
+
+    parameters:
+      docker:
+        context: "/integration-platform-service"
+        filePath: "/integration-platform-service/Dockerfile"
+
+---
+apiVersion: openchoreo.dev/v1alpha1
+kind: ReleaseBinding
+metadata:
+  name: integration-platform-api-service-development
+spec:
+  environment: development
+  owner:
+    componentName: integration-platform-api-service
+    projectName: devant
+  state: Active
+  workloadOverrides:
+    containers:
+      main:
+        env:
+          - key: PLATFORM_API_SERVICE_BASE_URL
+            value: "http://platform-api-service.dp-default-core-development-32790e9d.svc.cluster.local/wso2cloud-dp"
+
+---
+apiVersion: openchoreo.dev/v1alpha1
+kind: ComponentWorkflowRun
+metadata:
+  name: integration-platform-api-service-build-01
+spec:
+  owner:
+    projectName: "devant"
+    componentName: "integration-platform-api-service"
+
+  workflow:
+    name: docker
+
+    systemParameters:
+      repository:
+        url: "https://github.com/gabilang/integration-platform"
+        revision:
+          branch: "main"
+        appPath: "/integration-platform-service"
+
+    parameters:
+      docker:
+        context: "/integration-platform-service"
+        filePath: "/integration-platform-service/Dockerfile"

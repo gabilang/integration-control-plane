@@ -19,7 +19,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { gql } from './graphql';
 import { authenticatedFetch, getOrgUuidFromToken } from '../auth/tokenManager';
-import { choreoDevopsApiUrl } from '../config/api';
+import { env } from '../config/env';
 
 export interface GqlProject {
   id: string;
@@ -79,7 +79,7 @@ const COMPONENTS_QUERY = `
   }`;
 
 function orgId(): number {
-  return window.API_CONFIG.asgardeoOrgNumericId ?? 0;
+  return env.ICP_ORG_NUMERIC_ID;
 }
 
 export function useProjects() {
@@ -91,32 +91,24 @@ export function useProjects() {
   });
 }
 
-interface OrgEntry {
-  handle?: string;
-  orgHandle?: string;
-  id?: string | number;
-  orgId?: string | number;
-  // The org UUID may be returned under any of these field names depending on API version
-  uuid?: string;
-  orgUuid?: string;
-  org_uuid?: string;
+export interface OrgEntry {
+  handle: string;
+  numericId: number;
+  uuid: string;
 }
 
+/**
+ * Returns the current organization derived from the runtime config.
+ * With Thunder auth, org context comes from JWT claims injected into the BFF;
+ * the frontend reads the configured numeric org ID from ICP_ORG_NUMERIC_ID.
+ */
 export function useOrgs() {
   return useQuery({
     queryKey: ['orgs'],
-    queryFn: async () => {
-      const res = await authenticatedFetch(`${window.API_CONFIG.choreoOrgApiUrl}/orgs`);
-      if (!res.ok) throw new Error('Failed to fetch orgs');
-      const data = await res.json();
-      const list: OrgEntry[] = Array.isArray(data) ? data : (data.list ?? data.organizations ?? []);
-      return list
-        .map((o) => ({
-          handle: o.handle ?? o.orgHandle ?? '',
-          numericId: parseInt(String(o.id ?? o.orgId ?? '0'), 10),
-          uuid: o.uuid ?? o.orgUuid ?? o.org_uuid ?? '',
-        }))
-        .filter((o) => o.handle && o.numericId > 0);
+    queryFn: async (): Promise<OrgEntry[]> => {
+      const numericId = env.ICP_ORG_NUMERIC_ID;
+      if (numericId <= 0) return [];
+      return [{ handle: 'default', numericId, uuid: '' }];
     },
     staleTime: 5 * 60 * 1000,
   });
@@ -278,26 +270,6 @@ export function useAllEnvironments() {
   });
 }
 
-export interface CloudDataPlane {
-  id: string;
-  external_gateway_virtual_host: string;
-  internal_gateway_virtual_host: string;
-  region: string;
-  is_cilium?: boolean;
-}
-
-export function useCloudDataPlanes(orgUuid: string) {
-  return useQuery({
-    queryKey: ['cloud-data-planes', orgUuid],
-    queryFn: async () => {
-      const res = await authenticatedFetch(`${choreoDevopsApiUrl()}/api/v1/clusters/clouddataplanes?org_uuid=${encodeURIComponent(orgUuid)}`);
-      if (!res.ok) throw new Error(`Failed to fetch cloud data planes: ${res.status}`);
-      return res.json() as Promise<CloudDataPlane[]>;
-    },
-    enabled: !!orgUuid,
-    staleTime: 5 * 60 * 1000,
-  });
-}
 
 export interface GqlLogger {
   componentName: string;

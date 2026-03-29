@@ -1,0 +1,642 @@
+openapi: 3.0.3
+info:
+  title: Integration Platform API Service
+  description: >
+    API layer for the OpenChoreo integration platform. Exposes project and
+    component management operations to the Devant Console and other consumers.
+    All endpoints except /health require a valid JWT Bearer token; the org
+    context is extracted from the `ouHandle` claim.
+  version: 1.0.0
+
+servers:
+  - url: /
+    description: Service root (exposed via kgateway at /integration-platform-api-service)
+
+security:
+  - bearerAuth: []
+
+paths:
+
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      security: []
+      tags: [Health]
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  # ── Projects ────────────────────────────────────────────────────────────────
+
+  /projects:
+    get:
+      summary: List projects
+      operationId: listProjects
+      tags: [Projects]
+      parameters:
+        - $ref: "#/components/parameters/cursor"
+      responses:
+        "200":
+          description: Paginated list of projects
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    post:
+      summary: Create a project
+      operationId: createProject
+      tags: [Projects]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+      responses:
+        "201":
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /projects/{projectName}:
+    parameters:
+      - $ref: "#/components/parameters/projectName"
+
+    get:
+      summary: Get a project
+      operationId: getProject
+      tags: [Projects]
+      responses:
+        "200":
+          description: Project details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    put:
+      summary: Update a project
+      operationId: updateProject
+      tags: [Projects]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectRequest"
+      responses:
+        "200":
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      summary: Delete a project
+      operationId: deleteProject
+      tags: [Projects]
+      responses:
+        "204":
+          description: Project deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ── Components ───────────────────────────────────────────────────────────────
+
+  /projects/{projectName}/components:
+    parameters:
+      - $ref: "#/components/parameters/projectName"
+
+    get:
+      summary: List components
+      operationId: listComponents
+      tags: [Components]
+      parameters:
+        - $ref: "#/components/parameters/cursor"
+      responses:
+        "200":
+          description: Paginated list of components
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComponentList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    post:
+      summary: Create a component
+      description: >
+        Creates a service component and triggers an initial build. If
+        `autoDeploy` is true, OpenChoreo automatically deploys the component
+        to the default environment after a successful build.
+      operationId: createComponent
+      tags: [Components]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateComponentRequest"
+            examples:
+              docker:
+                summary: Docker-based component
+                value:
+                  name: hello-world-service
+                  displayName: Hello World Service
+                  type: service/ballerina-service
+                  componentType: deployment/service
+                  autoDeploy: true
+                  workflow:
+                    name: docker
+                    systemParameters:
+                      repository:
+                        url: https://github.com/wso2/integration-samples.git
+                        revision:
+                          branch: main
+                        appPath: /ballerina-integrator/hello-world-service
+              ballerina:
+                summary: Ballerina buildpack component
+                value:
+                  name: hello-world-service
+                  displayName: Hello World Service
+                  type: service/ballerina-service
+                  componentType: deployment/service
+                  autoDeploy: true
+                  workflow:
+                    name: ballerina-buildpack
+                    systemParameters:
+                      repository:
+                        url: https://github.com/wso2/integration-samples.git
+                        revision:
+                          branch: main
+                        appPath: /ballerina-integrator/hello-world-service
+      responses:
+        "201":
+          description: Component created and initial build triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateComponentResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ── Builds ───────────────────────────────────────────────────────────────────
+
+  /projects/{projectName}/components/{componentName}/builds:
+    parameters:
+      - $ref: "#/components/parameters/projectName"
+      - $ref: "#/components/parameters/componentName"
+
+    post:
+      summary: Trigger a build
+      description: Manually triggers a new build workflow run for the component.
+      operationId: triggerBuild
+      tags: [Builds]
+      responses:
+        "201":
+          description: Build triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowRun"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    get:
+      summary: List builds
+      operationId: listBuilds
+      tags: [Builds]
+      parameters:
+        - $ref: "#/components/parameters/cursor"
+      responses:
+        "200":
+          description: Paginated list of workflow runs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowRunList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /projects/{projectName}/components/{componentName}/builds/{buildName}:
+    parameters:
+      - $ref: "#/components/parameters/projectName"
+      - $ref: "#/components/parameters/componentName"
+      - $ref: "#/components/parameters/buildName"
+
+    get:
+      summary: Get build status
+      operationId: getBuildStatus
+      tags: [Builds]
+      responses:
+        "200":
+          description: Build workflow run details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowRun"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /projects/{projectName}/components/{componentName}/builds/{buildName}/logs:
+    parameters:
+      - $ref: "#/components/parameters/projectName"
+      - $ref: "#/components/parameters/componentName"
+      - $ref: "#/components/parameters/buildName"
+
+    get:
+      summary: Get build logs
+      description: >
+        Returns log entries for the specified build. Requires the observability
+        service to be configured via `OBSERVABILITY_SERVICE_BASE_URL`. Returns
+        503 if the service is not available.
+      operationId: getBuildLogs
+      tags: [Builds]
+      responses:
+        "200":
+          description: Build log entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BuildLogs"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+# ── Components ─────────────────────────────────────────────────────────────────
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        JWT issued by the platform IDP. The `ouHandle` claim is used to
+        determine the organisation context for all requests.
+
+  parameters:
+    projectName:
+      name: projectName
+      in: path
+      required: true
+      schema:
+        type: string
+      example: abc
+
+    componentName:
+      name: componentName
+      in: path
+      required: true
+      schema:
+        type: string
+      example: hello-world-service
+
+    buildName:
+      name: buildName
+      in: path
+      required: true
+      schema:
+        type: string
+      example: hello-world-service-workflow-a1557f64
+
+    cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Pagination cursor from a previous response
+
+  responses:
+    BadRequest:
+      description: Invalid request body or missing required field
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Missing or invalid JWT token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ServiceUnavailable:
+      description: Dependent service not configured or unavailable
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Not Found
+        message:
+          type: string
+          example: project not found
+
+    # ── Projects ──────────────────────────────────────────────────────────────
+
+    Project:
+      type: object
+      properties:
+        uid:
+          type: string
+        name:
+          type: string
+        namespaceName:
+          type: string
+        displayName:
+          type: string
+        description:
+          type: string
+        deploymentPipeline:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+
+    ProjectList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Project"
+        totalCount:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    CreateProjectRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        displayName:
+          type: string
+        description:
+          type: string
+        deploymentPipeline:
+          type: string
+
+    UpdateProjectRequest:
+      type: object
+      properties:
+        displayName:
+          type: string
+        description:
+          type: string
+        deploymentPipeline:
+          type: string
+
+    # ── Components ────────────────────────────────────────────────────────────
+
+    Component:
+      type: object
+      properties:
+        uid:
+          type: string
+        name:
+          type: string
+        projectName:
+          type: string
+        displayName:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          example: service/ballerina-service
+        autoDeploy:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+
+    ComponentList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Component"
+        totalCount:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    WorkflowRevision:
+      type: object
+      properties:
+        branch:
+          type: string
+        commit:
+          type: string
+
+    WorkflowRepository:
+      type: object
+      properties:
+        url:
+          type: string
+        revision:
+          $ref: "#/components/schemas/WorkflowRevision"
+        appPath:
+          type: string
+
+    WorkflowSystemParameters:
+      type: object
+      properties:
+        repository:
+          $ref: "#/components/schemas/WorkflowRepository"
+
+    ComponentWorkflowConfig:
+      type: object
+      properties:
+        name:
+          type: string
+          enum: [docker, ballerina-buildpack, google-cloud-buildpacks]
+        systemParameters:
+          $ref: "#/components/schemas/WorkflowSystemParameters"
+        parameters:
+          type: object
+          additionalProperties: true
+
+    CreateComponentRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        displayName:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          example: service/ballerina-service
+        componentType:
+          type: string
+          example: deployment/service
+        autoDeploy:
+          type: boolean
+          default: true
+        workflow:
+          $ref: "#/components/schemas/ComponentWorkflowConfig"
+        parameters:
+          type: object
+          additionalProperties: true
+
+    CreateComponentResponse:
+      type: object
+      properties:
+        component:
+          $ref: "#/components/schemas/Component"
+        buildRun:
+          $ref: "#/components/schemas/WorkflowRun"
+
+    # ── Builds ────────────────────────────────────────────────────────────────
+
+    WorkflowRun:
+      type: object
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+          example: Running
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        componentName:
+          type: string
+        projectName:
+          type: string
+        image:
+          type: string
+        commit:
+          type: string
+
+    WorkflowRunList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkflowRun"
+        totalCount:
+          type: integer
+
+    BuildLogEntry:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        log:
+          type: string
+        level:
+          type: string
+          example: INFO
+
+    BuildLogs:
+      type: object
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: "#/components/schemas/BuildLogEntry"
+        totalCount:
+          type: integer

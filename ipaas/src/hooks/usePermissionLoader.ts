@@ -16,55 +16,15 @@
  * under the License.
  */
 
-import { useEffect, useRef } from 'react';
-import { useAuth } from '../auth/AuthContext';
-import { useAccessControl } from '../contexts/AccessControlContext';
-import { fetchProjectPermissions, fetchComponentPermissions } from '../api/auth';
-
-export function useLoadProjectPermissions(orgHandle: string, projectId: string) {
-  const { userId, isOidcUser } = useAuth();
-  const { setProjectPermissions, clearProjectPermissions } = useAccessControl();
-  const loadedRef = useRef<string>('');
-
-  useEffect(() => {
-    // OIDC users get all permissions granted at org level in AppLayout — skip local auth API
-    if (!projectId || !userId || isOidcUser) return;
-
-    // If switching to a different project, clear previous permissions
-    if (loadedRef.current && loadedRef.current !== projectId) {
-      clearProjectPermissions();
-    }
-
-    if (loadedRef.current === projectId) return;
-    loadedRef.current = projectId;
-
-    fetchProjectPermissions(orgHandle, userId, projectId)
-      .then((data) => setProjectPermissions(projectId, data.permissionNames))
-      .catch((err) => console.error('Failed to fetch project permissions', err));
-  }, [orgHandle, projectId, userId, isOidcUser, setProjectPermissions, clearProjectPermissions]);
+/**
+ * All users are authenticated via Thunder OIDC — org-level permissions are
+ * granted in full at login (AppLayout). Project/component permission fetching
+ * from the local auth API is no longer needed.
+ */
+export function useLoadProjectPermissions(_orgHandle: string, _projectId: string) {
+  // No-op: Thunder users inherit all permissions from org-level grant.
 }
 
-export function useLoadComponentPermissions(orgHandle: string, projectId: string, componentId: string) {
-  const { userId, isOidcUser } = useAuth();
-  const { setComponentPermissions, clearComponentPermissions } = useAccessControl();
-  const loadedRef = useRef<string>('');
-
-  useEffect(() => {
-    // OIDC users get all permissions granted at org level in AppLayout — skip local auth API
-    if (!componentId || !projectId || !userId || isOidcUser) return;
-
-    // If switching to a different component, clear previous permissions
-    if (loadedRef.current && loadedRef.current !== componentId) {
-      clearComponentPermissions();
-    }
-
-    // Skip if already loaded for this component
-    if (loadedRef.current === componentId) return;
-
-    loadedRef.current = componentId;
-
-    fetchComponentPermissions(orgHandle, userId, projectId, componentId)
-      .then((data) => setComponentPermissions(componentId, data.permissionNames))
-      .catch((err) => console.error('Failed to fetch component permissions', err));
-  }, [orgHandle, projectId, componentId, userId, isOidcUser, setComponentPermissions, clearComponentPermissions]);
+export function useLoadComponentPermissions(_orgHandle: string, _projectId: string, _componentId: string) {
+  // No-op: Thunder users inherit all permissions from org-level grant.
 }

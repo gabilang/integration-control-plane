@@ -16,6 +16,13 @@
  * under the License.
  */
 
+/**
+ * Centralized API configuration.
+ * Configuration is loaded from /config.json at runtime (modifiable after build).
+ * Stored on window.API_CONFIG for global access.
+ */
+
+import { env } from './env';
 interface RuntimeConfig {
   VITE_GRAPHQL_URL?: string;
   VITE_AUTH_BASE_URL?: string;
@@ -148,3 +155,15 @@ export const choreologgingComponentLogsApiUrl = (gatewayHost: string): string =>
   const { sysApiPrefix } = window.API_CONFIG;
   return `https://${sysApiPrefix}.${gatewayHost}/systemapis/choreologgingapi/0.2.0/logs/component/application?live=true`;
 };
+
+/** Base URL of the ipaas-service BFF (e.g. /ipaas-service). */
+export const icpApiBaseUrl = (): string => env.ICP_API_BASE_URL;
+
+/** GraphQL proxy — POSTed to by all GraphQL queries/mutations. */
+export const graphqlApiUrl = (): string => `${icpApiBaseUrl()}/graphql`;
+
+/** Auth proxy — base for all user/role/group management calls. */
+export const authApiUrl = (): string => `${icpApiBaseUrl()}/auth`;
+
+/** Observability proxy — base for logs and metrics. */
+export const observabilityApiUrl = (): string => `${icpApiBaseUrl()}/observability`;

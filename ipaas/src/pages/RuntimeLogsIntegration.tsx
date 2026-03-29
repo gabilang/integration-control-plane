@@ -19,9 +19,9 @@
 import { CircularProgress, PageContent } from '@wso2/oxygen-ui';
 import { ScrollText } from '@wso2/oxygen-ui-icons-react';
 import { useMemo, type JSX } from 'react';
-import { useOrgs, useProjectsByOrg, useComponentByHandler, useEnvironments, useAllEnvironments, useCloudDataPlanes } from '../api/queries';
+import { useOrgs, useProjectsByOrg, useComponentByHandler, useEnvironments, useAllEnvironments } from '../api/queries';
 import { useInfiniteComponentLogs, type ComponentLogsRequest } from '../api/logs';
-import { choreologgingComponentLogsApiUrl } from '../config/api';
+import { observabilityLogsApiUrl } from '../paths';
 import { AUTO_FETCH_INTERVAL, DEFAULT_DP_REGION, PAGE_SIZE } from '../utils/logs';
 import LogsFilters from '../components/Logs/LogsFilters';
 import LogsPageLayout from '../components/Logs/LogsPageLayout';
@@ -50,19 +50,13 @@ export default function RuntimeLogsIntegration(scope: ComponentScope): JSX.Eleme
   const environments = orgUuid ? projectEnvs : globalEnvs;
   const loadingEnvironments = orgUuid ? loadingProjectEnvs : loadingGlobalEnvs;
 
-  const { data: cdps, isLoading: loadingCdps } = useCloudDataPlanes(orgUuid);
-
   const selectedEnvIds = envFilter.length > 0 ? envFilter : environments.map((e) => e.id);
   const primaryEnv = environments.find((e) => selectedEnvIds.includes(e.id));
 
   const envIdsKey = selectedEnvIds.join(',');
   const levelFilterKey = levelFilter.join(',');
 
-  const logsApiUrl = useMemo(() => {
-    if (!primaryEnv?.dpId || !cdps) return undefined;
-    const cdp = cdps.find((c) => c.id.toLowerCase() === primaryEnv.dpId!.toLowerCase());
-    return cdp ? choreologgingComponentLogsApiUrl(cdp.external_gateway_virtual_host) : undefined;
-  }, [primaryEnv?.dpId, cdps]);
+  const logsApiUrl = observabilityLogsApiUrl();
 
   const logsRequest = useMemo<ComponentLogsRequest | null>(() => {
     if (!component || !primaryEnv || !logsApiUrl) return null;
@@ -85,7 +79,7 @@ export default function RuntimeLogsIntegration(scope: ComponentScope): JSX.Eleme
 
   const logs = useMemo(() => data?.pages.flat() ?? [], [data]);
 
-  if (loadingOrgs || loadingProjects || loadingComponent || loadingEnvironments || loadingCdps) {
+  if (loadingOrgs || loadingProjects || loadingComponent || loadingEnvironments) {
     return (
       <PageContent sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
         <CircularProgress />
