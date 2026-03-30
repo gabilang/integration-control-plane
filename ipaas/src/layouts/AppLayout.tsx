@@ -752,7 +752,9 @@ export default function AppLayout(): JSX.Element {
             <Button
               variant="contained"
               onClick={async () => {
-                await signOut();
+                try {
+                  await signOut();
+                } catch { /* ignore revoke errors — tokens are cleared regardless */ }
                 setConfirmDialogOpen(false);
                 navigate(loginUrl());
               }}>

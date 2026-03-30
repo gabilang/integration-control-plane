@@ -18,7 +18,9 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { gql } from './graphql';
-import type { GqlArtifact, GqlComponent, GqlEnvironment, GqlProject } from './queries';
+import type { GqlArtifact, GqlComponent, GqlEnvironment } from './queries';
+import { icpClient } from './client';
+import { mapProject, type BffProject } from './queries';
 import { toBackendArtifactType } from './artifactToggleMutations';
 import { env } from '../config/env';
 
@@ -29,33 +31,18 @@ export interface CreateProjectInput {
   orgHandler: string;
 }
 
-const CREATE_PROJECT = `
-  mutation CreateProject($name: String!, $description: String!, $projectHandler: String!, $orgHandler: String!, $orgId: Int!) {
-    createProject(project: {
-      name: $name,
-      description: $description,
-      projectHandler: $projectHandler,
-      orgId: $orgId,
-      orgHandler: $orgHandler,
-      version: "1.0.0"
-    }) {
-      id, orgId, name, version, createdDate, handler, region,
-      description, defaultDeploymentPipelineId, deploymentPipelineIds,
-      type, updatedAt
-    }
-  }`;
-
 export function useCreateProject() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateProjectInput) =>
-      gql<{ createProject: GqlProject }>(CREATE_PROJECT, {
-        name: input.name,
-        description: input.description,
-        projectHandler: input.handler,
-        orgHandler: input.orgHandler,
-        orgId: env.ICP_ORG_NUMERIC_ID,
-      }).then((d) => d.createProject),
+      icpClient
+        .post<BffProject>('/projects', {
+          name: input.handler,        // K8s resource name (slug)
+          displayName: input.name,    // human-readable display name
+          description: input.description,
+          deploymentPipeline: 'default',
+        })
+        .then(mapProject),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
   });
 }
