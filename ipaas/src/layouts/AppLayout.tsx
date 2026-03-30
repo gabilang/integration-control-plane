@@ -54,7 +54,7 @@ import { BarChart3, Bell, ChevronDown, ChevronRight, Layers, LayoutDashboard, Lo
 import { useProject, useProjectByHandler, useProjects, useComponents, useOrgs } from '../api/queries';
 import { mockNotifications } from '../mock-data/mockNotifications';
 import { useScope, useResource, resourceUrl, broaden, narrow, newProjectUrl, newComponentUrl, sidebarItems, hasProject, hasComponent, type Resource } from '../nav';
-import { cookiePolicyUrl, orgHomeUrl, privacyPolicyUrl, profileUrl, projectHomeUrl } from '../paths';
+import { cookiePolicyUrl, loginUrl, orgHomeUrl, privacyPolicyUrl, profileUrl, projectHomeUrl } from '../paths';
 import { useAsgardeo } from '../auth';
 import { useAccessControl } from '../contexts/AccessControlContext';
 import { ALL_USER_MGT_PERMISSIONS, Permissions } from '../constants/permissions';
@@ -754,6 +754,7 @@ export default function AppLayout(): JSX.Element {
               onClick={async () => {
                 await signOut();
                 setConfirmDialogOpen(false);
+                navigate(loginUrl());
               }}>
               Sign Out
             </Button>
