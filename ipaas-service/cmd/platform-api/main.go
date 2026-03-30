@@ -49,10 +49,15 @@ func main() {
 	authProxy := icp.NewProxyClient(cfg.ICP.AuthBaseURL)
 	observabilityProxy := icp.NewProxyClient(cfg.Observability.BaseURL)
 
+	icpClient := icp.NewClient(cfg.ICP.GraphQLURL)
+	artifactService := services.NewArtifactService(icpClient)
+	artifactController := controllers.NewArtifactController(artifactService)
+
 	handler := api.NewHandler(api.AppParams{
 		ProjectController:     projectController,
 		ComponentController:   componentController,
 		EnvironmentController: environmentController,
+		ArtifactController:    artifactController,
 		GraphQLProxy:        graphqlProxy,
 		AuthProxy:           authProxy,
 		ObservabilityProxy:  observabilityProxy,

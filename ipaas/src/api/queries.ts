@@ -568,19 +568,14 @@ const ARTIFACT_QUERY_MAP: Record<string, { queryName: string; field: string; fie
 };
 
 export function useArtifacts(artifactType: string, envId: string, componentId: string, options?: { enabled?: boolean }) {
-  const mapping = ARTIFACT_QUERY_MAP[artifactType];
+  const known = artifactType in ARTIFACT_QUERY_MAP;
   return useQuery({
     queryKey: ['artifacts', artifactType, envId, componentId],
-    queryFn: async () => {
-      if (!mapping) return [];
-      const data = await gql<Record<string, GqlArtifact[]>>(`query ArtifactQuery($environmentId: String!, $componentId: String!) { ${mapping.field}(environmentId: $environmentId, componentId: $componentId) { ${mapping.gqlFields} } }`, {
-        environmentId: envId,
-        componentId,
-      }).catch(() => ({}) as Record<string, GqlArtifact[]>);
-      return data[mapping.field] ?? [];
-    },
-    enabled: !!artifactType && !!envId && !!componentId && !!mapping && (options?.enabled ?? true),
-    retry: false,
+    queryFn: () =>
+      icpClient
+        .get<{ items: GqlArtifact[] }>('/artifacts', { artifactType, environmentId: envId, componentId })
+        .then((d) => d.items ?? []),
+    enabled: known && !!artifactType && !!envId && !!componentId && (options?.enabled ?? true),
   });
 }
 

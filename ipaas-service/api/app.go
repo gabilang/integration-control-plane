@@ -15,6 +15,7 @@ type AppParams struct {
 	ProjectController     controllers.ProjectController
 	ComponentController   controllers.ComponentController
 	EnvironmentController controllers.EnvironmentController
+	ArtifactController    controllers.ArtifactController
 	GraphQLProxy          *icp.ProxyClient
 	AuthProxy             *icp.ProxyClient
 	ObservabilityProxy    *icp.ProxyClient
@@ -37,6 +38,7 @@ func NewHandler(params AppParams) http.Handler {
 	registerProjectRoutes(apiMux, params.ProjectController)
 	registerComponentRoutes(apiMux, params.ComponentController)
 	registerEnvironmentRoutes(apiMux, params.EnvironmentController)
+	registerArtifactRoutes(apiMux, params.ArtifactController)
 	registerGraphQLRoute(apiMux, params.GraphQLProxy)
 	registerAuthProxyRoutes(apiMux, params.AuthProxy)
 	registerObservabilityProxyRoutes(apiMux, params.ObservabilityProxy)
