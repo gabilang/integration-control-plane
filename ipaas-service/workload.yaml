@@ -1,11 +1,12 @@
 apiVersion: openchoreo.dev/v1alpha1
 
 metadata:
-  name: integration-platform-api-service
+  name: ipaas-service
 
 endpoints:
-  - name: integration-platform-api-http
+  - name: ipaas-api-http
     visibility:
       - external
     port: 8080
     type: REST
+    basePath: /
