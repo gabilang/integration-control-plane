@@ -19,7 +19,44 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { gql } from './graphql';
 import { authenticatedFetch, getOrgUuidFromToken } from '../auth/tokenManager';
+import { icpClient } from './client';
 import { env } from '../config/env';
+import { choreoDevopsApiUrl } from '../config/api';
+
+// ── BFF response shapes (mirrors ipaas-service/models/project.go, component.go) ──
+
+export interface BffProject {
+  uid?: string;
+  name: string;
+  displayName?: string;
+  description?: string;
+  deploymentPipeline?: string;
+  createdAt?: string;
+  status?: string;
+}
+
+export interface BffProjectList {
+  items: BffProject[];
+  totalCount?: number;
+}
+
+export interface BffComponent {
+  uid?: string;
+  name: string;
+  projectName?: string;
+  displayName?: string;
+  description?: string;
+  type?: string;
+  createdAt?: string;
+  status?: string;
+}
+
+export interface BffComponentList {
+  items: BffComponent[];
+  totalCount?: number;
+}
+
+// ── GQL-compatible output shapes (consumed by existing UI components) ──
 
 export interface GqlProject {
   id: string;
@@ -53,42 +90,72 @@ export interface GqlComponent {
   apiId?: string;
 }
 
-const PROJECT_FIELDS = 'id, orgId, name, handler, description, version, createdDate, updatedAt, region, type, defaultDeploymentPipelineId';
+// ── Mapping helpers (exported for use by mutations.ts) ──
 
-const PROJECTS_QUERY = `
-  query GetProjects($orgId: Int!) {
-    projects(orgId: $orgId) { ${PROJECT_FIELDS} }
-  }`;
+export function mapProject(p: BffProject): GqlProject {
+  return {
+    id: p.name,                      // K8s name is the unique identifier and URL slug
+    orgId: 0,
+    name: p.displayName || p.name,
+    handler: p.name,
+    description: p.description ?? '',
+    version: '',
+    createdDate: p.createdAt ?? '',
+    updatedAt: p.createdAt ?? '',
+    region: '',
+    type: '',
+    defaultDeploymentPipelineId: '',
+  };
+}
 
-const PROJECT_QUERY = `
-  query GetProject($orgId: Int!, $projectId: String!) {
-    project(orgId: $orgId, projectId: $projectId) { ${PROJECT_FIELDS} }
-  }`;
+export function mapComponent(c: BffComponent): GqlComponent {
+  return {
+    id: c.name,
+    projectId: c.projectName ?? '',
+    name: c.displayName || c.name,
+    handler: c.name,
+    displayName: c.displayName ?? c.name,
+    displayType: c.type ?? '',
+    description: c.description ?? '',
+    status: c.status ?? '',
+    componentType: c.type,
+    componentSubType: null,
+    version: '',
+    createdAt: c.createdAt ?? '',
+    lastBuildDate: '',
+    labels: [],
+    apiId: undefined,
+  };
+}
 
-const PROJECT_BY_HANDLER_QUERY = `
-  query GetProjectByHandler($orgId: Int!, $projectHandler: String!) {
-    projectByHandler(orgId: $orgId, projectHandler: $projectHandler) { ${PROJECT_FIELDS} }
-  }`;
+// // ── Org / project hooks ──
+// const PROJECT_FIELDS = 'id, orgId, name, handler, description, version, createdDate, updatedAt, region, type, defaultDeploymentPipelineId';
 
-// componentType excluded as it is not in the schema
-const COMPONENTS_QUERY = `
-  query GetComponents($orgHandler: String!, $projectId: String!) {
-    components(orgHandler: $orgHandler, projectId: $projectId) {
-      projectId, id, name, handler, displayName, displayType, description, status, componentSubType, version, createdAt, lastBuildDate
-    }
-  }`;
+// const PROJECTS_QUERY = `
+//   query GetProjects($orgId: Int!) {
+//     projects(orgId: $orgId) { ${PROJECT_FIELDS} }
+//   }`;
+
+// const PROJECT_QUERY = `
+//   query GetProject($orgId: Int!, $projectId: String!) {
+//     project(orgId: $orgId, projectId: $projectId) { ${PROJECT_FIELDS} }
+//   }`;
+
+// const PROJECT_BY_HANDLER_QUERY = `
+//   query GetProjectByHandler($orgId: Int!, $projectHandler: String!) {
+//     projectByHandler(orgId: $orgId, projectHandler: $projectHandler) { ${PROJECT_FIELDS} }
+//   }`;
+
+// // componentType excluded as it is not in the schema
+// const COMPONENTS_QUERY = `
+//   query GetComponents($orgHandler: String!, $projectId: String!) {
+//     components(orgHandler: $orgHandler, projectId: $projectId) {
+//       projectId, id, name, handler, displayName, displayType, description, status, componentSubType, version, createdAt, lastBuildDate
+//     }
+//   }`;
 
 function orgId(): number {
   return env.ICP_ORG_NUMERIC_ID;
-}
-
-export function useProjects() {
-  const id = orgId();
-  return useQuery({
-    queryKey: ['projects', id],
-    queryFn: () => gql<{ projects: GqlProject[] }>(PROJECTS_QUERY, { orgId: id }).then((d) => d.projects),
-    enabled: id > 0,
-  });
 }
 
 export interface OrgEntry {
@@ -98,50 +165,57 @@ export interface OrgEntry {
 }
 
 /**
- * Returns the current organization derived from the runtime config.
- * With Thunder auth, org context comes from JWT claims injected into the BFF;
- * the frontend reads the configured numeric org ID from ICP_ORG_NUMERIC_ID.
+ * Returns the current organization. With Thunder auth the org context is
+ * derived from JWT claims in the BFF; the frontend does not need a numeric ID.
  */
 export function useOrgs() {
   return useQuery({
     queryKey: ['orgs'],
-    queryFn: async (): Promise<OrgEntry[]> => {
-      const numericId = env.ICP_ORG_NUMERIC_ID;
-      if (numericId <= 0) return [];
-      return [{ handle: 'default', numericId, uuid: '' }];
-    },
+    queryFn: async (): Promise<OrgEntry[]> => [{ handle: 'default', numericId: 0, uuid: '' }],
     staleTime: 5 * 60 * 1000,
   });
 }
 
-export function useProjectsByOrg(orgHandle: string) {
-  const { data: orgs } = useOrgs();
-  const numericId = orgs?.find((o) => o.handle === orgHandle)?.numericId ?? 0;
+export function useProjects() {
   return useQuery({
-    queryKey: ['projects', numericId],
-    queryFn: () => gql<{ projects: GqlProject[] }>(PROJECTS_QUERY, { orgId: numericId }).then((d) => d.projects),
-    enabled: numericId > 0,
+    queryKey: ['projects'],
+    queryFn: () => icpClient.get<BffProjectList>('/projects').then((d) => d.items.map(mapProject)),
   });
 }
 
-export function useProject(projectId: string) {
-  const id = orgId();
+// export function useProjects() {
+//   const id = orgId();
+//   return useQuery({
+//     queryKey: ['projects', id],
+//     queryFn: () => gql<{ projects: GqlProject[] }>(PROJECTS_QUERY, { orgId: id }).then((d) => d.projects),
+//     enabled: id > 0,
+//   });
+// }
+
+export function useProjectsByOrg(orgHandle: string) {
   return useQuery({
-    queryKey: ['project', projectId, id],
-    queryFn: () => gql<{ project: GqlProject }>(PROJECT_QUERY, { orgId: id, projectId }).then((d) => d.project),
-    enabled: !!projectId && id > 0,
+    queryKey: ['projects'],
+    queryFn: () => icpClient.get<BffProjectList>('/projects').then((d) => d.items.map(mapProject)),
+    enabled: !!orgHandle,
+  });
+}
+
+export function useProject(projectName: string) {
+  return useQuery({
+    queryKey: ['project', projectName],
+    queryFn: () => icpClient.get<BffProject>(`/projects/${encodeURIComponent(projectName)}`).then(mapProject),
+    enabled: !!projectName,
   });
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function useProjectByHandler(handler: string) {
-  const id = orgId();
   return useQuery({
-    queryKey: ['project', 'handler', handler, id],
-    queryFn: () => gql<{ projectByHandler: GqlProject }>(PROJECT_BY_HANDLER_QUERY, { orgId: id, projectHandler: handler }).then((d) => d.projectByHandler),
-    // Guard: never call if handler is empty or looks like a UUID (should use useProject instead)
-    enabled: !!handler && id > 0 && !UUID_RE.test(handler),
+    queryKey: ['project', 'handler', handler],
+    queryFn: () => icpClient.get<BffProject>(`/projects/${encodeURIComponent(handler)}`).then(mapProject),
+    // Guard: never call if handler is empty or looks like a UUID (use useProject instead)
+    enabled: !!handler && !UUID_RE.test(handler),
   });
 }
 
@@ -176,11 +250,33 @@ export function useProjectContributors(projectId: string) {
   });
 }
 
-export function useComponents(orgHandler: string, projectId: string) {
+export interface CloudDataPlane {
+  id: string;
+  external_gateway_virtual_host: string;
+  internal_gateway_virtual_host: string;
+  region: string;
+  is_cilium?: boolean;
+}
+
+export function useCloudDataPlanes(orgUuid: string) {
   return useQuery({
-    queryKey: ['components', orgHandler, projectId],
-    queryFn: () => gql<{ components: GqlComponent[] }>(COMPONENTS_QUERY, { orgHandler, projectId }).then((d) => d.components),
-    enabled: !!orgHandler && !!projectId,
+    queryKey: ['cloud-data-planes', orgUuid],
+    queryFn: async () => {
+      const res = await authenticatedFetch(`${choreoDevopsApiUrl()}/api/v1/clusters/clouddataplanes?org_uuid=${encodeURIComponent(orgUuid)}`);
+      if (!res.ok) throw new Error(`Failed to fetch cloud data planes: ${res.status}`);
+      return res.json() as Promise<CloudDataPlane[]>;
+    },
+    enabled: !!orgUuid,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useComponents(orgHandler: string, projectName: string) {
+  return useQuery({
+    queryKey: ['components', projectName],
+    queryFn: () =>
+      icpClient.get<BffComponentList>('/components', { projectName }).then((d) => d.items.map(mapComponent)),
+    enabled: !!orgHandler && !!projectName,
   });
 }
 
