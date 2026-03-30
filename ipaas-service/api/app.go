@@ -12,11 +12,12 @@ import (
 
 // AppParams holds all dependencies needed to build the HTTP handler.
 type AppParams struct {
-	ProjectController   controllers.ProjectController
-	ComponentController controllers.ComponentController
-	GraphQLProxy        *icp.ProxyClient
-	AuthProxy           *icp.ProxyClient
-	ObservabilityProxy  *icp.ProxyClient
+	ProjectController     controllers.ProjectController
+	ComponentController   controllers.ComponentController
+	EnvironmentController controllers.EnvironmentController
+	GraphQLProxy          *icp.ProxyClient
+	AuthProxy             *icp.ProxyClient
+	ObservabilityProxy    *icp.ProxyClient
 }
 
 // NewHandler assembles the full HTTP handler with middleware and routes.
@@ -35,6 +36,7 @@ func NewHandler(params AppParams) http.Handler {
 	apiMux := http.NewServeMux()
 	registerProjectRoutes(apiMux, params.ProjectController)
 	registerComponentRoutes(apiMux, params.ComponentController)
+	registerEnvironmentRoutes(apiMux, params.EnvironmentController)
 	registerGraphQLRoute(apiMux, params.GraphQLProxy)
 	registerAuthProxyRoutes(apiMux, params.AuthProxy)
 	registerObservabilityProxyRoutes(apiMux, params.ObservabilityProxy)

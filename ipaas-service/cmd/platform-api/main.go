@@ -33,6 +33,10 @@ func main() {
 	projectService := services.NewProjectService(projectClient)
 	projectController := controllers.NewProjectController(projectService)
 
+	environmentClient := openchoreo.NewEnvironmentClient(cfg.PlatformAPI.BaseURL, cfg.PlatformAPI.HostHeader)
+	environmentService := services.NewEnvironmentService(environmentClient)
+	environmentController := controllers.NewEnvironmentController(environmentService)
+
 	componentClient := openchoreo.NewComponentClient(cfg.PlatformAPI.BaseURL, cfg.PlatformAPI.HostHeader)
 	var observClient observability.Client
 	if cfg.Observability.BaseURL != "" {
@@ -46,8 +50,9 @@ func main() {
 	observabilityProxy := icp.NewProxyClient(cfg.Observability.BaseURL)
 
 	handler := api.NewHandler(api.AppParams{
-		ProjectController:   projectController,
-		ComponentController: componentController,
+		ProjectController:     projectController,
+		ComponentController:   componentController,
+		EnvironmentController: environmentController,
 		GraphQLProxy:        graphqlProxy,
 		AuthProxy:           authProxy,
 		ObservabilityProxy:  observabilityProxy,
