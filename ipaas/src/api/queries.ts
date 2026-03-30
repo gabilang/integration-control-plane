@@ -18,7 +18,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { gql } from './graphql';
-import { authenticatedFetch, getOrgUuidFromToken } from '../auth/tokenManager';
+import { authenticatedFetch } from '../auth/tokenManager';
 import { icpClient } from './client';
 import { env } from '../config/env';
 import { choreoDevopsApiUrl } from '../config/api';
@@ -305,11 +305,16 @@ const COMPONENT_BY_HANDLER_QUERY = `
     }
   }`;
 
-export function useComponentByHandler(projectId: string, handler: string | undefined) {
+export function useComponentByHandler(projectName: string, handler: string | undefined) {
   return useQuery({
-    queryKey: ['component', projectId, handler],
-    queryFn: () => gql<{ component: GqlComponentDetail }>(COMPONENT_BY_HANDLER_QUERY, { projectId, componentHandler: handler }).then((d) => d.component),
-    enabled: !!projectId && !!handler,
+    queryKey: ['component', projectName, handler],
+    queryFn: () =>
+      icpClient.get<BffComponentList>('/components', { projectName }).then((d) => {
+        const c = d.items.find((x) => x.name === handler);
+        if (!c) throw new Error(`Component '${handler}' not found in project '${projectName}'`);
+        return { ...mapComponent(c), orgHandler: '' } as GqlComponentDetail;
+      }),
+    enabled: !!projectName && !!handler,
   });
 }
 
@@ -328,6 +333,32 @@ export function useProjectComponentLabels(projectId: string) {
   });
 }
 
+export interface BffEnvironment {
+  uid?: string;
+  name: string;
+  displayName?: string;
+  dataPlaneRef?: string;
+  isProduction?: boolean;
+  createdAt?: string;
+}
+
+export interface BffEnvironmentList {
+  items: BffEnvironment[];
+}
+
+export interface BffEnvironment {
+  uid?: string;
+  name: string;
+  displayName?: string;
+  dataPlaneRef?: string;
+  isProduction?: boolean;
+  createdAt?: string;
+}
+
+export interface BffEnvironmentList {
+  items: BffEnvironment[];
+}
+
 export interface GqlEnvironment {
   id: string;
   name: string;
@@ -338,30 +369,29 @@ export interface GqlEnvironment {
   createdAt?: string;
 }
 
-const ENVIRONMENTS_QUERY = `
-  query GetEnvironments($orgUuid: String!, $projectId: String!) {
-    environments(orgUuid: $orgUuid, type: "external", projectId: $projectId) {
-      id, name, critical, templateId, dpId
-    }
-  }`;
-
-export function useEnvironments(orgUuid: string, projectId: string) {
-  const effectiveOrgUuid = getOrgUuidFromToken() ?? orgUuid;
-  return useQuery({
-    queryKey: ['environments', effectiveOrgUuid, projectId],
-    queryFn: () => gql<{ environments: GqlEnvironment[] }>(ENVIRONMENTS_QUERY, { orgUuid: effectiveOrgUuid, projectId }).then((d) => d.environments),
-    enabled: !!effectiveOrgUuid && !!projectId,
-  });
+function mapEnvironment(e: BffEnvironment): GqlEnvironment {
+  return {
+    id: e.name,
+    name: e.displayName || e.name,
+    critical: e.isProduction ?? false,
+    dpId: e.dataPlaneRef,
+    createdAt: e.createdAt,
+  };
 }
 
-const ALL_ENVIRONMENTS_QUERY = `{
-  environments { id, name, description, critical, dpId, createdAt }
-}`;
+export function useEnvironments(orgUuid: string, projectId: string) {
+  // const effectiveOrgUuid = getOrgUuidFromToken() ?? orgUuid;
+  return useQuery({
+    queryKey: ['environments'],
+    queryFn: () => icpClient.get<BffEnvironmentList>('/environments').then((d) => d.items.map(mapEnvironment)),
+    enabled: !!orgUuid && !!projectId,
+  });
+}
 
 export function useAllEnvironments() {
   return useQuery({
     queryKey: ['environments'],
-    queryFn: () => gql<{ environments: GqlEnvironment[] }>(ALL_ENVIRONMENTS_QUERY).then((d) => d.environments),
+    queryFn: () => icpClient.get<BffEnvironmentList>('/environments').then((d) => d.items.map(mapEnvironment)),
     retry: false,
   });
 }

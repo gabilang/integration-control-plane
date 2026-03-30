@@ -102,6 +102,22 @@ type ocComponentList struct {
 	Items []ocComponent `json:"items"`
 }
 
+// -- Environment -------------------------------------------------------------
+
+type ocEnvironmentSpec struct {
+	DataPlaneRef *ocRef `json:"dataPlaneRef,omitempty"`
+	IsProduction *bool  `json:"isProduction,omitempty"`
+}
+
+type ocEnvironment struct {
+	Metadata ocObjectMeta      `json:"metadata"`
+	Spec     ocEnvironmentSpec `json:"spec,omitempty"`
+}
+
+type ocEnvironmentList struct {
+	Items []ocEnvironment `json:"items"`
+}
+
 // -- Workflow Run ------------------------------------------------------------
 
 type ocParameter struct {
