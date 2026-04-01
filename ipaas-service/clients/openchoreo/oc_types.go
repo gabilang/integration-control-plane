@@ -166,11 +166,11 @@ type ocReleaseBindingEnvConfigs struct {
 }
 
 type ocReleaseBindingSpec struct {
-	Owner              ocReleaseBindingOwner      `json:"owner"`
-	Environment        string                     `json:"environment"`
-	State              string                     `json:"state"`
-	EnvironmentConfigs ocReleaseBindingEnvConfigs `json:"environmentConfigs,omitempty"`
-	ReleaseName        string                     `json:"releaseName,omitempty"`
+	Owner                        ocReleaseBindingOwner      `json:"owner"`
+	Environment                  string                     `json:"environment"`
+	State                        string                     `json:"state"`
+	ComponentTypeEnvironmentConfigs ocReleaseBindingEnvConfigs `json:"componentTypeEnvironmentConfigs,omitempty"`
+	ReleaseName                  string                     `json:"releaseName,omitempty"`
 }
 
 type ocReleaseBinding struct {
@@ -181,4 +181,10 @@ type ocReleaseBinding struct {
 
 type ocReleaseBindingList struct {
 	Items []ocReleaseBinding `json:"items"`
+}
+
+// -- ComponentRelease --------------------------------------------------------
+
+type ocComponentRelease struct {
+	Metadata ocObjectMeta `json:"metadata"`
 }

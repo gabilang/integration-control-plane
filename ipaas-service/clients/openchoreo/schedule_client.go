@@ -18,6 +18,7 @@ type ScheduleClient interface {
 	CreateReleaseBinding(ctx context.Context, orgName, projectName, componentName string, req *models.UpsertScheduleRequest) (*models.Schedule, error)
 	UpdateReleaseBinding(ctx context.Context, orgName, projectName, componentName string, req *models.UpsertScheduleRequest) (*models.Schedule, error)
 	DeleteReleaseBinding(ctx context.Context, orgName, componentName, environment string) error
+	GenerateRelease(ctx context.Context, orgName, componentName string) (string, error)
 }
 
 type scheduleClient struct {
@@ -68,7 +69,7 @@ func normalizeReleaseBinding(rb ocReleaseBinding) models.Schedule {
 		projectName = labels["openchoreo.dev/project-name"]
 	}
 
-	imagePullPolicy := rb.Spec.EnvironmentConfigs.ImagePullPolicy
+	imagePullPolicy := rb.Spec.ComponentTypeEnvironmentConfigs.ImagePullPolicy
 	if imagePullPolicy == "" {
 		imagePullPolicy = "IfNotPresent"
 	}
@@ -77,17 +78,20 @@ func normalizeReleaseBinding(rb ocReleaseBinding) models.Schedule {
 		Environment:     rb.Spec.Environment,
 		ComponentName:   rb.Spec.Owner.ComponentName,
 		ProjectName:     projectName,
-		CronExpression:  rb.Spec.EnvironmentConfigs.Schedule,
+		CronExpression:  rb.Spec.ComponentTypeEnvironmentConfigs.Schedule,
 		State:           rb.Spec.State,
 		ImagePullPolicy: imagePullPolicy,
 		ReleaseName:     rb.Spec.ReleaseName,
 	}
 }
 
-func buildReleaseBindingBody(projectName, componentName string, req *models.UpsertScheduleRequest) ocReleaseBinding {
+func buildReleaseBindingBody(projectName, componentName, releaseName string, req *models.UpsertScheduleRequest) ocReleaseBinding {
 	state := req.State
 	if state == "" {
 		state = "Active"
+	}
+	if releaseName == "" {
+		releaseName = req.ReleaseName
 	}
 	return ocReleaseBinding{
 		Metadata: ocObjectMeta{
@@ -100,13 +104,32 @@ func buildReleaseBindingBody(projectName, componentName string, req *models.Upse
 			},
 			Environment: req.Environment,
 			State:       state,
-			EnvironmentConfigs: ocReleaseBindingEnvConfigs{
+			ComponentTypeEnvironmentConfigs: ocReleaseBindingEnvConfigs{
 				Schedule:        req.CronExpression,
 				ImagePullPolicy: "IfNotPresent",
 			},
-			ReleaseName: req.ReleaseName,
+			ReleaseName: releaseName,
 		},
 	}
+}
+
+// generateReleaseURL returns the URL for generating a release snapshot.
+func (c *scheduleClient) generateReleaseURL(componentName string) string {
+	return fmt.Sprintf("%s/components/%s/generate-release", c.baseURL, componentName)
+}
+
+// GenerateRelease generates a ComponentRelease snapshot from the latest Workload
+// and returns the generated release name.
+func (c *scheduleClient) GenerateRelease(ctx context.Context, _, componentName string) (string, error) {
+	req := c.newRequest(ctx, "openchoreo.GenerateRelease", http.MethodPost, c.generateReleaseURL(componentName))
+	req.SetJSON(map[string]any{})
+
+	result := requests.SendRequest(ctx, c.httpClient, req)
+	var raw ocComponentRelease
+	if err := result.ScanResponse(&raw, http.StatusCreated); err != nil {
+		return "", fmt.Errorf("generate release: %w", err)
+	}
+	return raw.Metadata.Name, nil
 }
 
 // ListReleaseBindings returns all release bindings for the given component,
@@ -143,8 +166,16 @@ func (c *scheduleClient) GetReleaseBinding(ctx context.Context, _, componentName
 }
 
 // CreateReleaseBinding creates a new release binding for the given component.
-func (c *scheduleClient) CreateReleaseBinding(ctx context.Context, _, projectName, componentName string, req *models.UpsertScheduleRequest) (*models.Schedule, error) {
-	body := buildReleaseBindingBody(projectName, componentName, req)
+func (c *scheduleClient) CreateReleaseBinding(ctx context.Context, orgName, projectName, componentName string, req *models.UpsertScheduleRequest) (*models.Schedule, error) {
+	releaseName := req.ReleaseName
+	if releaseName == "" {
+		var err error
+		releaseName, err = c.GenerateRelease(ctx, orgName, componentName)
+		if err != nil {
+			return nil, fmt.Errorf("auto generate release: %w", err)
+		}
+	}
+	body := buildReleaseBindingBody(projectName, componentName, releaseName, req)
 	httpReq := c.newRequest(ctx, "openchoreo.CreateReleaseBinding", http.MethodPost, c.releaseBindingsURL())
 	httpReq.SetJSON(body)
 
@@ -160,7 +191,7 @@ func (c *scheduleClient) CreateReleaseBinding(ctx context.Context, _, projectNam
 // UpdateReleaseBinding patches the release binding for the given component and environment.
 func (c *scheduleClient) UpdateReleaseBinding(ctx context.Context, _, projectName, componentName string, req *models.UpsertScheduleRequest) (*models.Schedule, error) {
 	name := releaseBindingName(componentName, req.Environment)
-	body := buildReleaseBindingBody(projectName, componentName, req)
+	body := buildReleaseBindingBody(projectName, componentName, "", req)
 	httpReq := c.newRequest(ctx, "openchoreo.UpdateReleaseBinding", http.MethodPatch, c.releaseBindingURL(name))
 	httpReq.SetJSON(body)
 
