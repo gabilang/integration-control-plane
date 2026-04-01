@@ -152,3 +152,33 @@ type ocWorkflowRun struct {
 type ocWorkflowRunList struct {
 	Items []ocWorkflowRun `json:"items"`
 }
+
+// -- ReleaseBinding ----------------------------------------------------------
+
+type ocReleaseBindingOwner struct {
+	ProjectName   string `json:"projectName"`
+	ComponentName string `json:"componentName"`
+}
+
+type ocReleaseBindingEnvConfigs struct {
+	Schedule        string `json:"schedule,omitempty"`
+	ImagePullPolicy string `json:"imagePullPolicy,omitempty"`
+}
+
+type ocReleaseBindingSpec struct {
+	Owner              ocReleaseBindingOwner      `json:"owner"`
+	Environment        string                     `json:"environment"`
+	State              string                     `json:"state"`
+	EnvironmentConfigs ocReleaseBindingEnvConfigs `json:"environmentConfigs,omitempty"`
+	ReleaseName        string                     `json:"releaseName,omitempty"`
+}
+
+type ocReleaseBinding struct {
+	Metadata ocObjectMeta         `json:"metadata"`
+	Spec     ocReleaseBindingSpec `json:"spec"`
+	Status   ocStatus             `json:"status,omitempty"`
+}
+
+type ocReleaseBindingList struct {
+	Items []ocReleaseBinding `json:"items"`
+}

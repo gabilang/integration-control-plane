@@ -45,6 +45,10 @@ func main() {
 	componentService := services.NewComponentService(componentClient, observClient)
 	componentController := controllers.NewComponentController(componentService)
 
+	scheduleClient := openchoreo.NewScheduleClient(cfg.PlatformAPI.BaseURL, cfg.PlatformAPI.HostHeader)
+	scheduleService := services.NewScheduleService(scheduleClient)
+	scheduleController := controllers.NewScheduleController(scheduleService)
+
 	graphqlProxy := icp.NewProxyClient(cfg.ICP.GraphQLURL)
 	authProxy := icp.NewProxyClient(cfg.ICP.AuthBaseURL)
 	observabilityProxy := icp.NewProxyClient(cfg.Observability.BaseURL)
@@ -58,9 +62,10 @@ func main() {
 		ComponentController:   componentController,
 		EnvironmentController: environmentController,
 		ArtifactController:    artifactController,
-		GraphQLProxy:        graphqlProxy,
-		AuthProxy:           authProxy,
-		ObservabilityProxy:  observabilityProxy,
+		ScheduleController:    scheduleController,
+		GraphQLProxy:          graphqlProxy,
+		AuthProxy:             authProxy,
+		ObservabilityProxy:    observabilityProxy,
 	})
 
 	server := &http.Server{
