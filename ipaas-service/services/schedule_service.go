@@ -47,7 +47,7 @@ func (s *scheduleService) GetSchedule(ctx context.Context, orgName, projectName,
 
 // UpsertSchedule creates the ReleaseBinding if it does not exist, otherwise updates it.
 func (s *scheduleService) UpsertSchedule(ctx context.Context, orgName, projectName, componentName string, req *models.UpsertScheduleRequest) (*models.Schedule, error) {
-	_, err := s.client.GetReleaseBinding(ctx, orgName, componentName, req.Environment)
+	existing, err := s.client.GetReleaseBinding(ctx, orgName, componentName, req.Environment)
 	if err != nil {
 		var httpErr *requests.HttpError
 		if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
@@ -60,6 +60,10 @@ func (s *scheduleService) UpsertSchedule(ctx context.Context, orgName, projectNa
 		return nil, translateScheduleHTTPError(err)
 	}
 
+	// Preserve the existing releaseName so the PUT body doesn't clear it.
+	if req.ReleaseName == "" && existing.ReleaseName != "" {
+		req.ReleaseName = existing.ReleaseName
+	}
 	schedule, err := s.client.UpdateReleaseBinding(ctx, orgName, projectName, componentName, req)
 	if err != nil {
 		return nil, translateScheduleHTTPError(err)
