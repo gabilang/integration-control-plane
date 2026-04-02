@@ -47,7 +47,7 @@ func main() {
 	componentController := controllers.NewComponentController(componentService)
 
 	scheduleClient := openchoreo.NewScheduleClient(cfg.PlatformAPI.BaseURL, cfg.PlatformAPI.HostHeader)
-	scheduleService := services.NewScheduleService(scheduleClient)
+	scheduleService := services.NewScheduleService(scheduleClient, componentClient)
 	scheduleController := controllers.NewScheduleController(scheduleService)
 
 	jobsClient, err := k8sclient.NewJobsClient()

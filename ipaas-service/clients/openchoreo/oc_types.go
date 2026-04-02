@@ -84,12 +84,20 @@ type ocWorkflow struct {
 	Parameters *ocWorkflowParameters `json:"parameters,omitempty"`
 }
 
+// ComponentParameters holds the component-level parameters for scheduled-task components.
+// These apply to all environments (not per-environment).
+type ComponentParameters struct {
+	BackoffLimit          *int `json:"backoffLimit,omitempty"`
+	ActiveDeadlineSeconds *int `json:"activeDeadlineSeconds,omitempty"`
+}
+
 type ocComponentSpec struct {
-	Owner         *ocOwner            `json:"owner,omitempty"`
-	ComponentType *ocComponentTypeRef `json:"componentType,omitempty"`
-	AutoDeploy    bool                `json:"autoDeploy,omitempty"`
-	AutoBuild     bool                `json:"autoBuild,omitempty"`
-	Workflow      *ocWorkflow         `json:"workflow,omitempty"`
+	Owner         *ocOwner             `json:"owner,omitempty"`
+	ComponentType *ocComponentTypeRef  `json:"componentType,omitempty"`
+	AutoDeploy    bool                 `json:"autoDeploy,omitempty"`
+	AutoBuild     bool                 `json:"autoBuild,omitempty"`
+	Workflow      *ocWorkflow          `json:"workflow,omitempty"`
+	Parameters    *ComponentParameters `json:"parameters,omitempty"`
 }
 
 type ocComponent struct {
