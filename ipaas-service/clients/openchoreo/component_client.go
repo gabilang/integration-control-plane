@@ -19,6 +19,8 @@ type ComponentClient interface {
 	TriggerBuild(ctx context.Context, orgName, projectName, componentName string) (*models.WorkflowRun, error)
 	ListWorkflowRuns(ctx context.Context, orgName, projectName, componentName string, limit int, cursor string) (*models.WorkflowRunList, error)
 	GetWorkflowRun(ctx context.Context, orgName, projectName, componentName, runName string) (*models.WorkflowRun, error)
+	GetComponentParameters(ctx context.Context, componentName string) (*ComponentParameters, error)
+	PatchComponentParameters(ctx context.Context, componentName string, params *ComponentParameters) error
 }
 
 type componentClient struct {
@@ -320,4 +322,32 @@ func (c *componentClient) GetWorkflowRun(ctx context.Context, _, projectName, co
 	}
 	run := normalizeWorkflowRun(raw)
 	return &run, nil
+}
+
+// GetComponentParameters reads the scheduled-task component parameters (backoffLimit, activeDeadlineSeconds).
+func (c *componentClient) GetComponentParameters(ctx context.Context, componentName string) (*ComponentParameters, error) {
+	httpReq := c.newRequest(ctx, "openchoreo.GetComponentParameters", http.MethodGet, c.componentURL(componentName))
+
+	result := requests.SendRequest(ctx, c.httpClient, httpReq)
+	var raw ocComponent
+	if err := result.ScanResponse(&raw, http.StatusOK); err != nil {
+		return nil, fmt.Errorf("get component parameters: %w", err)
+	}
+	return raw.Spec.Parameters, nil
+}
+
+// PatchComponentParameters updates the scheduled-task component parameters (backoffLimit, activeDeadlineSeconds).
+func (c *componentClient) PatchComponentParameters(ctx context.Context, componentName string, params *ComponentParameters) error {
+	body := ocComponent{
+		Metadata: ocObjectMeta{Name: componentName},
+		Spec:     ocComponentSpec{Parameters: params},
+	}
+	httpReq := c.newRequest(ctx, "openchoreo.PatchComponentParameters", http.MethodPatch, c.componentURL(componentName))
+	httpReq.SetJSON(body)
+
+	result := requests.SendRequest(ctx, c.httpClient, httpReq)
+	if err := result.ScanResponse(nil, http.StatusOK); err != nil {
+		return fmt.Errorf("patch component parameters: %w", err)
+	}
+	return nil
 }

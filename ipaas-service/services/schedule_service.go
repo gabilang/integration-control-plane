@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/wso2/integration-control-plane/ipaas-service/clients/openchoreo"
@@ -22,17 +23,28 @@ type ScheduleService interface {
 }
 
 type scheduleService struct {
-	client openchoreo.ScheduleClient
+	client          openchoreo.ScheduleClient
+	componentClient openchoreo.ComponentClient
 }
 
-func NewScheduleService(client openchoreo.ScheduleClient) ScheduleService {
-	return &scheduleService{client: client}
+func NewScheduleService(client openchoreo.ScheduleClient, componentClient openchoreo.ComponentClient) ScheduleService {
+	return &scheduleService{client: client, componentClient: componentClient}
 }
 
 func (s *scheduleService) ListSchedules(ctx context.Context, orgName, projectName, componentName string) (*models.ScheduleList, error) {
 	list, err := s.client.ListReleaseBindings(ctx, orgName, projectName, componentName)
 	if err != nil {
 		return nil, translateScheduleHTTPError(err)
+	}
+	params, err := s.componentClient.GetComponentParameters(ctx, componentName)
+	if err != nil {
+		slog.WarnContext(ctx, "failed to get component parameters", "error", err, "component", componentName)
+	}
+	if params != nil {
+		for i := range list.Items {
+			list.Items[i].BackoffLimit = params.BackoffLimit
+			list.Items[i].ActiveDeadlineSeconds = params.ActiveDeadlineSeconds
+		}
 	}
 	return list, nil
 }
@@ -42,10 +54,20 @@ func (s *scheduleService) GetSchedule(ctx context.Context, orgName, projectName,
 	if err != nil {
 		return nil, translateScheduleHTTPError(err)
 	}
+	params, err := s.componentClient.GetComponentParameters(ctx, componentName)
+	if err != nil {
+		slog.WarnContext(ctx, "failed to get component parameters", "error", err, "component", componentName)
+	}
+	if params != nil {
+		schedule.BackoffLimit = params.BackoffLimit
+		schedule.ActiveDeadlineSeconds = params.ActiveDeadlineSeconds
+	}
 	return schedule, nil
 }
 
 // UpsertSchedule creates the ReleaseBinding if it does not exist, otherwise updates it.
+// If BackoffLimit or ActiveDeadlineSeconds are set, the Component parameters are patched too
+// (these are component-wide settings, not per-environment).
 func (s *scheduleService) UpsertSchedule(ctx context.Context, orgName, projectName, componentName string, req *models.UpsertScheduleRequest) (*models.Schedule, error) {
 	existing, err := s.client.GetReleaseBinding(ctx, orgName, componentName, req.Environment)
 	if err != nil {
@@ -55,6 +77,7 @@ func (s *scheduleService) UpsertSchedule(ctx context.Context, orgName, projectNa
 			if createErr != nil {
 				return nil, translateScheduleHTTPError(createErr)
 			}
+			s.patchComponentParametersIfSet(ctx, componentName, req)
 			return schedule, nil
 		}
 		return nil, translateScheduleHTTPError(err)
@@ -68,7 +91,21 @@ func (s *scheduleService) UpsertSchedule(ctx context.Context, orgName, projectNa
 	if err != nil {
 		return nil, translateScheduleHTTPError(err)
 	}
+	s.patchComponentParametersIfSet(ctx, componentName, req)
 	return schedule, nil
+}
+
+func (s *scheduleService) patchComponentParametersIfSet(ctx context.Context, componentName string, req *models.UpsertScheduleRequest) {
+	if req.BackoffLimit == nil && req.ActiveDeadlineSeconds == nil {
+		return
+	}
+	params := &openchoreo.ComponentParameters{
+		BackoffLimit:          req.BackoffLimit,
+		ActiveDeadlineSeconds: req.ActiveDeadlineSeconds,
+	}
+	if err := s.componentClient.PatchComponentParameters(ctx, componentName, params); err != nil {
+		slog.WarnContext(ctx, "failed to patch component parameters", "error", err, "component", componentName)
+	}
 }
 
 func (s *scheduleService) DeleteSchedule(ctx context.Context, orgName, projectName, componentName, environment string) error {
