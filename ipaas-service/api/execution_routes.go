@@ -8,4 +8,5 @@ import (
 
 func registerExecutionRoutes(mux *http.ServeMux, c controllers.ExecutionController) {
 	mux.HandleFunc("GET /components/{componentName}/schedules/{environment}/executions", c.ListExecutions)
+	mux.HandleFunc("POST /components/{componentName}/schedules/{environment}/executions", c.TriggerExecution)
 }

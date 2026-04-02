@@ -4,10 +4,12 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/wso2/integration-control-plane/ipaas-service/clients/requests"
 	"github.com/wso2/integration-control-plane/ipaas-service/models"
@@ -19,9 +21,13 @@ const (
 	k8sAPIBase   = "https://kubernetes.default.svc.cluster.local"
 )
 
-// JobsClient lists Kubernetes batch/v1 Jobs using in-cluster credentials.
+var ErrCronJobNotFound = errors.New("cronjob not found")
+
+// JobsClient manages Kubernetes batch/v1 Jobs and CronJobs using in-cluster credentials.
 type JobsClient interface {
 	ListJobs(ctx context.Context, labelSelector string) (*models.ExecutionList, error)
+	GetCronJob(ctx context.Context, labelSelector string) (*k8sCronJob, error)
+	TriggerJob(ctx context.Context, cronjob *k8sCronJob) (*models.Execution, error)
 }
 
 type jobsClient struct {
@@ -47,16 +53,24 @@ func NewJobsClient() (JobsClient, error) {
 	}, nil
 }
 
+func (c *jobsClient) saToken() (string, error) {
+	token, err := os.ReadFile(saTokenPath)
+	if err != nil {
+		return "", fmt.Errorf("read k8s SA token: %w", err)
+	}
+	return strings.TrimSpace(string(token)), nil
+}
+
 // ListJobs returns all batch/v1 Jobs matching the given label selector,
 // across all namespaces.
 func (c *jobsClient) ListJobs(ctx context.Context, labelSelector string) (*models.ExecutionList, error) {
-	token, err := os.ReadFile(saTokenPath)
+	token, err := c.saToken()
 	if err != nil {
-		return nil, fmt.Errorf("read k8s SA token: %w", err)
+		return nil, err
 	}
 
 	req := requests.NewRequest("k8s.ListJobs", http.MethodGet, c.baseURL+"/apis/batch/v1/jobs")
-	req.SetHeader("Authorization", "Bearer "+strings.TrimSpace(string(token)))
+	req.SetHeader("Authorization", "Bearer "+token)
 	if labelSelector != "" {
 		req.SetQuery("labelSelector", labelSelector)
 	}
@@ -72,6 +86,62 @@ func (c *jobsClient) ListJobs(ctx context.Context, labelSelector string) (*model
 		items[i] = normalizeJob(job)
 	}
 	return &models.ExecutionList{Items: items}, nil
+}
+
+// GetCronJob returns the first CronJob matching the given label selector.
+// Returns ErrCronJobNotFound if no CronJob matches.
+func (c *jobsClient) GetCronJob(ctx context.Context, labelSelector string) (*k8sCronJob, error) {
+	token, err := c.saToken()
+	if err != nil {
+		return nil, err
+	}
+
+	req := requests.NewRequest("k8s.GetCronJob", http.MethodGet, c.baseURL+"/apis/batch/v1/cronjobs")
+	req.SetHeader("Authorization", "Bearer "+token)
+	if labelSelector != "" {
+		req.SetQuery("labelSelector", labelSelector)
+	}
+
+	result := requests.SendRequest(ctx, c.httpClient, req)
+	var raw k8sCronJobList
+	if err := result.ScanResponse(&raw, http.StatusOK); err != nil {
+		return nil, fmt.Errorf("get cronjob: %w", err)
+	}
+	if len(raw.Items) == 0 {
+		return nil, ErrCronJobNotFound
+	}
+	return &raw.Items[0], nil
+}
+
+// TriggerJob creates a one-off Job from the CronJob's job template and returns the new execution.
+func (c *jobsClient) TriggerJob(ctx context.Context, cronjob *k8sCronJob) (*models.Execution, error) {
+	token, err := c.saToken()
+	if err != nil {
+		return nil, err
+	}
+
+	jobName := fmt.Sprintf("%s-manual-%d", cronjob.Metadata.Name, time.Now().UnixMilli())
+	body := k8sJob{
+		Metadata: k8sObjectMeta{
+			Name:      jobName,
+			Namespace: cronjob.Metadata.Namespace,
+			Labels:    cronjob.Spec.JobTemplate.Metadata.Labels,
+		},
+		Spec: cronjob.Spec.JobTemplate.Spec,
+	}
+
+	url := fmt.Sprintf("%s/apis/batch/v1/namespaces/%s/jobs", c.baseURL, cronjob.Metadata.Namespace)
+	req := requests.NewRequest("k8s.TriggerJob", http.MethodPost, url)
+	req.SetHeader("Authorization", "Bearer "+token)
+	req.SetJSON(body)
+
+	result := requests.SendRequest(ctx, c.httpClient, req)
+	var raw k8sJob
+	if err := result.ScanResponse(&raw, http.StatusCreated); err != nil {
+		return nil, fmt.Errorf("trigger job: %w", err)
+	}
+	execution := normalizeJob(raw)
+	return &execution, nil
 }
 
 func normalizeJob(job k8sJob) models.Execution {
