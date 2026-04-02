@@ -121,7 +121,7 @@ func (c *jobsClient) TriggerJob(ctx context.Context, cronjob *k8sCronJob) (*mode
 	}
 
 	jobName := fmt.Sprintf("%s-manual-%d", cronjob.Metadata.Name, time.Now().UnixMilli())
-	body := k8sJob{
+	body := k8sTriggerJobBody{
 		Metadata: k8sObjectMeta{
 			Name:      jobName,
 			Namespace: cronjob.Metadata.Namespace,

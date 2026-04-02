@@ -1,5 +1,7 @@
 package k8s
 
+import "encoding/json"
+
 // Internal types for deserializing Kubernetes batch/v1 Job and CronJob responses.
 
 type k8sObjectMeta struct {
@@ -42,9 +44,13 @@ type k8sJobList struct {
 	Items []k8sJob `json:"items"`
 }
 
+// k8sJobTemplateSpec holds the CronJob's jobTemplate.
+// Spec is kept as raw JSON so it is passed through to Job creation unchanged —
+// avoids losing required fields (container name, restartPolicy, resources, etc.)
+// that are not part of our limited read model.
 type k8sJobTemplateSpec struct {
-	Metadata k8sObjectMeta `json:"metadata"`
-	Spec     k8sJobSpec    `json:"spec"`
+	Metadata k8sObjectMeta   `json:"metadata"`
+	Spec     json.RawMessage `json:"spec"`
 }
 
 type k8sCronJobSpec struct {
@@ -58,4 +64,10 @@ type k8sCronJob struct {
 
 type k8sCronJobList struct {
 	Items []k8sCronJob `json:"items"`
+}
+
+// k8sTriggerJobBody is the request body for creating a manual Job from a CronJob.
+type k8sTriggerJobBody struct {
+	Metadata k8sObjectMeta   `json:"metadata"`
+	Spec     json.RawMessage `json:"spec"`
 }
