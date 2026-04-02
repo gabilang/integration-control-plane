@@ -1,9 +1,11 @@
 package k8s
 
-// Internal types for deserializing Kubernetes batch/v1 Job list responses.
+// Internal types for deserializing Kubernetes batch/v1 Job and CronJob responses.
 
 type k8sObjectMeta struct {
-	Name string `json:"name"`
+	Name      string            `json:"name"`
+	Namespace string            `json:"namespace,omitempty"`
+	Labels    map[string]string `json:"labels,omitempty"`
 }
 
 type k8sContainer struct {
@@ -38,4 +40,22 @@ type k8sJob struct {
 
 type k8sJobList struct {
 	Items []k8sJob `json:"items"`
+}
+
+type k8sJobTemplateSpec struct {
+	Metadata k8sObjectMeta `json:"metadata"`
+	Spec     k8sJobSpec    `json:"spec"`
+}
+
+type k8sCronJobSpec struct {
+	JobTemplate k8sJobTemplateSpec `json:"jobTemplate"`
+}
+
+type k8sCronJob struct {
+	Metadata k8sObjectMeta  `json:"metadata"`
+	Spec     k8sCronJobSpec `json:"spec"`
+}
+
+type k8sCronJobList struct {
+	Items []k8sCronJob `json:"items"`
 }
