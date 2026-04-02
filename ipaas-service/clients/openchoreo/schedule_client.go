@@ -15,6 +15,7 @@ import (
 type ScheduleClient interface {
 	ListReleaseBindings(ctx context.Context, orgName, projectName, componentName string) (*models.ScheduleList, error)
 	GetReleaseBinding(ctx context.Context, orgName, componentName, environment string) (*models.Schedule, error)
+	GetReleaseBindingNamespace(ctx context.Context, orgName, componentName, environment string) (string, error)
 	CreateReleaseBinding(ctx context.Context, orgName, projectName, componentName string, req *models.UpsertScheduleRequest) (*models.Schedule, error)
 	UpdateReleaseBinding(ctx context.Context, orgName, projectName, componentName string, req *models.UpsertScheduleRequest) (*models.Schedule, error)
 	DeleteReleaseBinding(ctx context.Context, orgName, componentName, environment string) error
@@ -163,6 +164,20 @@ func (c *scheduleClient) GetReleaseBinding(ctx context.Context, _, componentName
 	}
 	s := normalizeReleaseBinding(raw)
 	return &s, nil
+}
+
+// GetReleaseBindingNamespace returns the Kubernetes namespace of the ReleaseBinding,
+// which is the org-scoped namespace used to label CronJob-spawned Jobs.
+func (c *scheduleClient) GetReleaseBindingNamespace(ctx context.Context, _, componentName, environment string) (string, error) {
+	name := releaseBindingName(componentName, environment)
+	req := c.newRequest(ctx, "openchoreo.GetReleaseBindingNamespace", http.MethodGet, c.releaseBindingURL(name))
+
+	result := requests.SendRequest(ctx, c.httpClient, req)
+	var raw ocReleaseBinding
+	if err := result.ScanResponse(&raw, http.StatusOK); err != nil {
+		return "", fmt.Errorf("get release binding namespace: %w", err)
+	}
+	return raw.Metadata.Namespace, nil
 }
 
 // CreateReleaseBinding creates a new release binding for the given component.

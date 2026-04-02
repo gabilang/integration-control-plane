@@ -12,6 +12,7 @@ import (
 
 	"github.com/wso2/integration-control-plane/ipaas-service/api"
 	"github.com/wso2/integration-control-plane/ipaas-service/clients/icp"
+	k8sclient "github.com/wso2/integration-control-plane/ipaas-service/clients/k8s"
 	"github.com/wso2/integration-control-plane/ipaas-service/clients/observability"
 	"github.com/wso2/integration-control-plane/ipaas-service/clients/openchoreo"
 	"github.com/wso2/integration-control-plane/ipaas-service/config"
@@ -49,6 +50,13 @@ func main() {
 	scheduleService := services.NewScheduleService(scheduleClient)
 	scheduleController := controllers.NewScheduleController(scheduleService)
 
+	jobsClient, err := k8sclient.NewJobsClient()
+	if err != nil {
+		slog.Warn("k8s jobs client unavailable, executions API will fail at runtime", "error", err)
+	}
+	executionService := services.NewExecutionService(scheduleClient, jobsClient)
+	executionController := controllers.NewExecutionController(executionService)
+
 	graphqlProxy := icp.NewProxyClient(cfg.ICP.GraphQLURL)
 	authProxy := icp.NewProxyClient(cfg.ICP.AuthBaseURL)
 	observabilityProxy := icp.NewProxyClient(cfg.Observability.BaseURL)
@@ -63,6 +71,7 @@ func main() {
 		EnvironmentController: environmentController,
 		ArtifactController:    artifactController,
 		ScheduleController:    scheduleController,
+		ExecutionController:   executionController,
 		GraphQLProxy:          graphqlProxy,
 		AuthProxy:             authProxy,
 		ObservabilityProxy:    observabilityProxy,
