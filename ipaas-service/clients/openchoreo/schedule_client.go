@@ -192,7 +192,7 @@ func (c *scheduleClient) CreateReleaseBinding(ctx context.Context, orgName, proj
 func (c *scheduleClient) UpdateReleaseBinding(ctx context.Context, _, projectName, componentName string, req *models.UpsertScheduleRequest) (*models.Schedule, error) {
 	name := releaseBindingName(componentName, req.Environment)
 	body := buildReleaseBindingBody(projectName, componentName, "", req)
-	httpReq := c.newRequest(ctx, "openchoreo.UpdateReleaseBinding", http.MethodPatch, c.releaseBindingURL(name))
+	httpReq := c.newRequest(ctx, "openchoreo.UpdateReleaseBinding", http.MethodPut, c.releaseBindingURL(name))
 	httpReq.SetJSON(body)
 
 	result := requests.SendRequest(ctx, c.httpClient, httpReq)
