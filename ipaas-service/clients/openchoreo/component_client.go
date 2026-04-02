@@ -337,17 +337,23 @@ func (c *componentClient) GetComponentParameters(ctx context.Context, componentN
 }
 
 // PatchComponentParameters updates the scheduled-task component parameters (backoffLimit, activeDeadlineSeconds).
+// The Platform API does not support PATCH on components, so this does a GET-then-PUT to preserve
+// all existing fields (workflow, autoBuild, etc.) while updating only spec.parameters.
 func (c *componentClient) PatchComponentParameters(ctx context.Context, componentName string, params *ComponentParameters) error {
-	body := ocComponent{
-		Metadata: ocObjectMeta{Name: componentName},
-		Spec:     ocComponentSpec{Parameters: params},
+	getReq := c.newRequest(ctx, "openchoreo.GetComponentForPatch", http.MethodGet, c.componentURL(componentName))
+	getResult := requests.SendRequest(ctx, c.httpClient, getReq)
+	var existing ocComponent
+	if err := getResult.ScanResponse(&existing, http.StatusOK); err != nil {
+		return fmt.Errorf("get component for parameter update: %w", err)
 	}
-	httpReq := c.newRequest(ctx, "openchoreo.PatchComponentParameters", http.MethodPatch, c.componentURL(componentName))
-	httpReq.SetJSON(body)
 
-	result := requests.SendRequest(ctx, c.httpClient, httpReq)
+	existing.Spec.Parameters = params
+	putReq := c.newRequest(ctx, "openchoreo.PatchComponentParameters", http.MethodPut, c.componentURL(componentName))
+	putReq.SetJSON(existing)
+
+	result := requests.SendRequest(ctx, c.httpClient, putReq)
 	if err := result.ScanResponse(nil, http.StatusOK); err != nil {
-		return fmt.Errorf("patch component parameters: %w", err)
+		return fmt.Errorf("put component parameters: %w", err)
 	}
 	return nil
 }

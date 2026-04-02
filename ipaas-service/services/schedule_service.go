@@ -77,7 +77,10 @@ func (s *scheduleService) UpsertSchedule(ctx context.Context, orgName, projectNa
 			if createErr != nil {
 				return nil, translateScheduleHTTPError(createErr)
 			}
-			s.patchComponentParametersIfSet(ctx, componentName, req)
+			if s.patchComponentParametersIfSet(ctx, componentName, req) {
+				schedule.BackoffLimit = req.BackoffLimit
+				schedule.ActiveDeadlineSeconds = req.ActiveDeadlineSeconds
+			}
 			return schedule, nil
 		}
 		return nil, translateScheduleHTTPError(err)
@@ -91,13 +94,18 @@ func (s *scheduleService) UpsertSchedule(ctx context.Context, orgName, projectNa
 	if err != nil {
 		return nil, translateScheduleHTTPError(err)
 	}
-	s.patchComponentParametersIfSet(ctx, componentName, req)
+	if s.patchComponentParametersIfSet(ctx, componentName, req) {
+		schedule.BackoffLimit = req.BackoffLimit
+		schedule.ActiveDeadlineSeconds = req.ActiveDeadlineSeconds
+	}
 	return schedule, nil
 }
 
-func (s *scheduleService) patchComponentParametersIfSet(ctx context.Context, componentName string, req *models.UpsertScheduleRequest) {
+// patchComponentParametersIfSet updates component-level parameters and returns whether it succeeded.
+// Errors are logged as warnings — the ReleaseBinding upsert already succeeded so we don't fail the request.
+func (s *scheduleService) patchComponentParametersIfSet(ctx context.Context, componentName string, req *models.UpsertScheduleRequest) bool {
 	if req.BackoffLimit == nil && req.ActiveDeadlineSeconds == nil {
-		return
+		return false
 	}
 	params := &openchoreo.ComponentParameters{
 		BackoffLimit:          req.BackoffLimit,
@@ -105,7 +113,9 @@ func (s *scheduleService) patchComponentParametersIfSet(ctx context.Context, com
 	}
 	if err := s.componentClient.PatchComponentParameters(ctx, componentName, params); err != nil {
 		slog.WarnContext(ctx, "failed to patch component parameters", "error", err, "component", componentName)
+		return false
 	}
+	return true
 }
 
 func (s *scheduleService) DeleteSchedule(ctx context.Context, orgName, projectName, componentName, environment string) error {
