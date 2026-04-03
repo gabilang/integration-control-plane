@@ -66,7 +66,11 @@ type WorkflowRepository struct {
 	AppPath  string            `json:"appPath,omitempty"`
 }
 
-// UpdateBuildParametersRequest holds the fields that can be changed after a component is created.
+// UpdateComponentRequest holds the mutable fields of a component resource.
+type UpdateComponentRequest struct {
+	DisplayName string `json:"displayName,omitempty"`
+	Description string `json:"description,omitempty"`
+}
 // Only the workflow configuration (repository, build type, parameters) is mutable.
 type UpdateBuildParametersRequest struct {
 	Workflow *ComponentWorkflowSpec `json:"workflow"`
@@ -123,4 +127,37 @@ type ComponentWorkflowParameters struct {
 type CreateComponentResponse struct {
 	Component *Component   `json:"component"`
 	BuildRun  *WorkflowRun `json:"buildRun,omitempty"`
+}
+
+type ComponentRepository struct {
+	GitProvider        string `json:"gitProvider,omitempty"`
+	OrganizationApp    string `json:"organizationApp,omitempty"`
+	NameApp            string `json:"nameApp,omitempty"`
+	Branch             string `json:"branch,omitempty"`
+	AppSubPath         string `json:"appSubPath,omitempty"`
+	BitbucketServerURL string `json:"bitbucketServerUrl,omitempty"`
+	ServerURL          string `json:"serverUrl,omitempty"`
+	ProjectApp         string `json:"projectApp,omitempty"`
+}
+
+type Commit struct {
+	SHA      string       `json:"sha"`
+	Message  string       `json:"message,omitempty"`
+	IsLatest bool         `json:"isLatest,omitempty"`
+	Author   CommitAuthor `json:"author"`
+}
+
+type CommitAuthor struct {
+	Name      string `json:"name,omitempty"`
+	Date      string `json:"date,omitempty"`
+	Email     string `json:"email,omitempty"`
+	AvatarURL string `json:"avatarUrl,omitempty"`
+}
+
+type CommitList struct {
+	Items []Commit `json:"items"`
+}
+
+type LabelList struct {
+	Items []string `json:"items"`
 }

@@ -43,7 +43,16 @@ func main() {
 	if cfg.Observability.BaseURL != "" {
 		observClient = observability.NewClient(cfg.Observability.BaseURL)
 	}
-	componentService := services.NewComponentService(componentClient, observClient)
+
+	graphqlProxy := icp.NewProxyClient(cfg.ICP.GraphQLURL)
+	authProxy := icp.NewProxyClient(cfg.ICP.AuthBaseURL)
+	observabilityProxy := icp.NewProxyClient(cfg.Observability.BaseURL)
+
+	icpClient := icp.NewClient(cfg.ICP.GraphQLURL)
+	artifactService := services.NewArtifactService(icpClient)
+	artifactController := controllers.NewArtifactController(artifactService)
+
+	componentService := services.NewComponentService(componentClient, observClient, icpClient)
 	componentController := controllers.NewComponentController(componentService)
 
 	scheduleClient := openchoreo.NewScheduleClient(cfg.PlatformAPI.BaseURL, cfg.PlatformAPI.HostHeader)
@@ -55,15 +64,20 @@ func main() {
 		slog.Warn("k8s jobs client unavailable, executions API will fail at runtime", "error", err)
 	}
 	executionService := services.NewExecutionService(scheduleClient, jobsClient)
-	executionController := controllers.NewExecutionController(executionService)
+	executionConfigService := services.NewExecutionConfigService(icpClient)
+	executionController := controllers.NewExecutionController(executionService, executionConfigService)
 
-	graphqlProxy := icp.NewProxyClient(cfg.ICP.GraphQLURL)
-	authProxy := icp.NewProxyClient(cfg.ICP.AuthBaseURL)
-	observabilityProxy := icp.NewProxyClient(cfg.Observability.BaseURL)
+	runtimeService := services.NewRuntimeService(icpClient)
+	runtimeController := controllers.NewRuntimeController(runtimeService)
 
-	icpClient := icp.NewClient(cfg.ICP.GraphQLURL)
-	artifactService := services.NewArtifactService(icpClient)
-	artifactController := controllers.NewArtifactController(artifactService)
+	deploymentService := services.NewDeploymentService(icpClient)
+	deploymentController := controllers.NewDeploymentController(deploymentService)
+
+	loggerService := services.NewLoggerService(icpClient)
+	loggerController := controllers.NewLoggerController(loggerService)
+
+	secretService := services.NewSecretService(icpClient)
+	secretController := controllers.NewSecretController(secretService)
 
 	handler := api.NewHandler(api.AppParams{
 		ProjectController:     projectController,
@@ -72,6 +86,10 @@ func main() {
 		ArtifactController:    artifactController,
 		ScheduleController:    scheduleController,
 		ExecutionController:   executionController,
+		RuntimeController:     runtimeController,
+		DeploymentController:  deploymentController,
+		LoggerController:      loggerController,
+		SecretController:      secretController,
 		GraphQLProxy:          graphqlProxy,
 		AuthProxy:             authProxy,
 		ObservabilityProxy:    observabilityProxy,

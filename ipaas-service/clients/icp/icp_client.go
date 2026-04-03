@@ -33,8 +33,8 @@ func (c *Client) IsAvailable() bool {
 }
 
 type queryRequest struct {
-	Query     string            `json:"query"`
-	Variables map[string]string `json:"variables,omitempty"`
+	Query     string      `json:"query"`
+	Variables interface{} `json:"variables,omitempty"`
 }
 
 type queryResponse struct {
@@ -44,9 +44,11 @@ type queryResponse struct {
 	} `json:"errors,omitempty"`
 }
 
-// Query executes a query against the ICP service and returns the raw data
-// fields keyed by field name. The Bearer token is read from the request context.
-func (c *Client) Query(ctx context.Context, query string, variables map[string]string) (map[string]json.RawMessage, error) {
+// Query executes a query or mutation against the ICP service and returns the
+// raw data fields keyed by field name. The Bearer token is read from the
+// request context. Variables may be map[string]string, map[string]interface{},
+// or any JSON-serializable type.
+func (c *Client) Query(ctx context.Context, query string, variables interface{}) (map[string]json.RawMessage, error) {
 	body, err := json.Marshal(queryRequest{Query: query, Variables: variables})
 	if err != nil {
 		return nil, fmt.Errorf("icp: marshal request: %w", err)

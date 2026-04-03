@@ -96,7 +96,7 @@ async function request<T>(
 
 export const icpClient = {
   get: <T>(path: string, params?: Record<string, string | undefined>) => request<T>('GET', path, { params }),
-  post: <T>(path: string, body?: unknown) => request<T>('POST', path, { body }),
-  put: <T>(path: string, body?: unknown) => request<T>('PUT', path, { body }),
-  delete: <T>(path: string) => request<T>('DELETE', path),
+  post: <T>(path: string, body?: unknown, params?: Record<string, string | undefined>) => request<T>('POST', path, { body, params }),
+  put: <T>(path: string, body?: unknown, params?: Record<string, string | undefined>) => request<T>('PUT', path, { body, params }),
+  delete: <T>(path: string, body?: unknown) => request<T>('DELETE', path, body !== undefined ? { body } : undefined),
 };

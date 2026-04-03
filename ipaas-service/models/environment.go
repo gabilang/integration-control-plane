@@ -12,3 +12,16 @@ type Environment struct {
 type EnvironmentList struct {
 	Items []Environment `json:"items"`
 }
+
+// CreateEnvironmentRequest holds the fields required to create an environment.
+type CreateEnvironmentRequest struct {
+	Name         string `json:"name"`
+	DisplayName  string `json:"displayName,omitempty"`
+	IsProduction bool   `json:"isProduction,omitempty"`
+}
+
+// UpdateEnvironmentRequest holds the mutable fields of an environment.
+type UpdateEnvironmentRequest struct {
+	DisplayName  string `json:"displayName,omitempty"`
+	IsProduction *bool  `json:"isProduction,omitempty"`
+}

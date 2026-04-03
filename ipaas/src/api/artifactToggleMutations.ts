@@ -17,22 +17,8 @@
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { gql } from './graphql';
+import { icpClient } from './client';
 import type { GqlArtifact } from './queries';
-
-const UPDATE_ARTIFACT_TRACING_STATUS = `
-  mutation UpdateArtifactTracingStatus($input: ArtifactTracingChangeInput!) {
-    updateArtifactTracingStatus(input: $input) {
-      status, message, successCount, failedCount, details
-    }
-  }`;
-
-const UPDATE_ARTIFACT_STATISTICS_STATUS = `
-  mutation UpdateArtifactStatisticsStatus($input: ArtifactStatisticsChangeInput!) {
-    updateArtifactStatisticsStatus(input: $input) {
-      status, message, successCount, failedCount, details
-    }
-  }`;
 
 export interface ArtifactToggleStatusInput {
   envId: string;
@@ -70,14 +56,14 @@ export function toBackendArtifactType(artifactType: string): string {
   return toKebab(artifactType);
 }
 
-const TOGGLE_CONFIG: Record<ArtifactToggleKind, { mutation: string; requestField: 'trace' | 'statistics'; cacheField: 'tracing' | 'statistics' }> = {
+const TOGGLE_CONFIG: Record<ArtifactToggleKind, { endpoint: string; requestField: 'trace' | 'statistics'; cacheField: 'tracing' | 'statistics' }> = {
   tracing: {
-    mutation: UPDATE_ARTIFACT_TRACING_STATUS,
+    endpoint: '/artifacts/tracing',
     requestField: 'trace',
     cacheField: 'tracing',
   },
   statistics: {
-    mutation: UPDATE_ARTIFACT_STATISTICS_STATUS,
+    endpoint: '/artifacts/statistics',
     requestField: 'statistics',
     cacheField: 'statistics',
   },
@@ -88,20 +74,13 @@ export function useUpdateArtifactToggleStatus(kind: ArtifactToggleKind) {
   const config = TOGGLE_CONFIG[kind];
 
   return useMutation({
-    mutationFn: (input: ArtifactToggleStatusInput) => {
-      const mutationInput: Record<string, string> = {
+    mutationFn: (input: ArtifactToggleStatusInput) =>
+      icpClient.put<{ status: string; message: string }>(config.endpoint, {
         componentId: input.componentId,
         artifactType: toBackendArtifactType(input.artifactType),
         artifactName: input.artifactName,
         [config.requestField]: input.value,
-      };
-
-      if (kind === 'tracing') {
-        return gql<{ updateArtifactTracingStatus: { status: string; message: string } }>(config.mutation, { input: mutationInput }).then((d) => d.updateArtifactTracingStatus);
-      }
-
-      return gql<{ updateArtifactStatisticsStatus: { status: string; message: string } }>(config.mutation, { input: mutationInput }).then((d) => d.updateArtifactStatisticsStatus);
-    },
+      }),
     onMutate: async (input) => {
       const scope = (q: { queryKey: readonly unknown[] }) => q.queryKey[2] === input.envId && q.queryKey[3] === input.componentId;
       const filters = { queryKey: ['artifacts', input.artifactType] as const, predicate: scope };

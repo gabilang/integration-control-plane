@@ -21,6 +21,8 @@ type ComponentClient interface {
 	GetWorkflowRun(ctx context.Context, orgName, projectName, componentName, runName string) (*models.WorkflowRun, error)
 	GetComponentParameters(ctx context.Context, componentName string) (*ComponentParameters, error)
 	PatchComponentParameters(ctx context.Context, componentName string, params *ComponentParameters) error
+	DeleteComponent(ctx context.Context, orgName, projectName, componentName string) error
+	UpdateComponent(ctx context.Context, orgName, projectName, componentName string, req *models.UpdateComponentRequest) (*models.Component, error)
 }
 
 type componentClient struct {
@@ -356,4 +358,46 @@ func (c *componentClient) PatchComponentParameters(ctx context.Context, componen
 		return fmt.Errorf("put component parameters: %w", err)
 	}
 	return nil
+}
+
+// DeleteComponent deletes a component from the OpenChoreo API.
+func (c *componentClient) DeleteComponent(ctx context.Context, _, _, componentName string) error {
+	httpReq := c.newRequest(ctx, "openchoreo.DeleteComponent", http.MethodDelete, c.componentURL(componentName))
+	result := requests.SendRequest(ctx, c.httpClient, httpReq)
+	if err := result.ScanResponse(nil, http.StatusNoContent); err != nil {
+		return fmt.Errorf("delete component: %w", err)
+	}
+	return nil
+}
+
+// UpdateComponent updates the mutable metadata (displayName, description) of a component
+// using a GET-then-PUT strategy to preserve all existing fields.
+func (c *componentClient) UpdateComponent(ctx context.Context, _, _, componentName string, req *models.UpdateComponentRequest) (*models.Component, error) {
+	getReq := c.newRequest(ctx, "openchoreo.GetComponentForUpdate", http.MethodGet, c.componentURL(componentName))
+	getResult := requests.SendRequest(ctx, c.httpClient, getReq)
+	var existing ocComponent
+	if err := getResult.ScanResponse(&existing, http.StatusOK); err != nil {
+		return nil, fmt.Errorf("get component for update: %w", err)
+	}
+
+	if existing.Metadata.Annotations == nil {
+		existing.Metadata.Annotations = make(map[string]string)
+	}
+	if req.DisplayName != "" {
+		existing.Metadata.Annotations["openchoreo.dev/display-name"] = req.DisplayName
+	}
+	if req.Description != "" {
+		existing.Metadata.Annotations["openchoreo.dev/description"] = req.Description
+	}
+
+	putReq := c.newRequest(ctx, "openchoreo.UpdateComponent", http.MethodPut, c.componentURL(componentName))
+	putReq.SetJSON(existing)
+
+	result := requests.SendRequest(ctx, c.httpClient, putReq)
+	var raw ocComponent
+	if err := result.ScanResponse(&raw, http.StatusOK); err != nil {
+		return nil, fmt.Errorf("update component: %w", err)
+	}
+	comp := normalizeComponent(raw)
+	return &comp, nil
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	jwtmw "github.com/wso2/integration-control-plane/ipaas-service/middleware/jwt"
 	"github.com/wso2/integration-control-plane/ipaas-service/models"
@@ -17,10 +18,15 @@ type ComponentController interface {
 	ListComponents(w http.ResponseWriter, r *http.Request)
 	CreateComponent(w http.ResponseWriter, r *http.Request)
 	UpdateBuildParameters(w http.ResponseWriter, r *http.Request)
+	UpdateComponent(w http.ResponseWriter, r *http.Request)
+	DeleteComponent(w http.ResponseWriter, r *http.Request)
 	TriggerBuild(w http.ResponseWriter, r *http.Request)
 	ListBuilds(w http.ResponseWriter, r *http.Request)
 	GetBuildStatus(w http.ResponseWriter, r *http.Request)
 	GetBuildLogs(w http.ResponseWriter, r *http.Request)
+	GetComponentRepository(w http.ResponseWriter, r *http.Request)
+	GetCommitHistory(w http.ResponseWriter, r *http.Request)
+	GetComponentLabels(w http.ResponseWriter, r *http.Request)
 }
 
 type componentController struct {
@@ -131,6 +137,69 @@ func (c *componentController) UpdateBuildParameters(w http.ResponseWriter, r *ht
 	}
 
 	utils.WriteSuccessResponse(w, http.StatusOK, component)
+}
+
+func (c *componentController) UpdateComponent(w http.ResponseWriter, r *http.Request) {
+	claims := jwtmw.ClaimsFromContext(r.Context())
+	if claims == nil || claims.OrgHandle == "" {
+		utils.WriteErrorResponse(w, http.StatusUnauthorized, "missing org context")
+		return
+	}
+	org := claims.OrgHandle
+	componentName := r.PathValue("componentName")
+	projectName := r.URL.Query().Get("projectName")
+
+	var req models.UpdateComponentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.WriteErrorResponse(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	component, err := c.service.UpdateComponent(r.Context(), org, projectName, componentName, &req)
+	if err != nil {
+		if errors.Is(err, services.ErrUnauthorized) {
+			utils.WriteErrorResponse(w, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
+		if errors.Is(err, services.ErrComponentNotFound) {
+			utils.WriteErrorResponse(w, http.StatusNotFound, "component not found")
+			return
+		}
+		slog.ErrorContext(r.Context(), "update component failed",
+			"error", err, "org", org, "project", projectName, "component", componentName)
+		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to update component")
+		return
+	}
+
+	utils.WriteSuccessResponse(w, http.StatusOK, component)
+}
+
+func (c *componentController) DeleteComponent(w http.ResponseWriter, r *http.Request) {
+	claims := jwtmw.ClaimsFromContext(r.Context())
+	if claims == nil || claims.OrgHandle == "" {
+		utils.WriteErrorResponse(w, http.StatusUnauthorized, "missing org context")
+		return
+	}
+	org := claims.OrgHandle
+	componentName := r.PathValue("componentName")
+	projectName := r.URL.Query().Get("projectName")
+
+	if err := c.service.DeleteComponent(r.Context(), org, projectName, componentName); err != nil {
+		if errors.Is(err, services.ErrUnauthorized) {
+			utils.WriteErrorResponse(w, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
+		if errors.Is(err, services.ErrComponentNotFound) {
+			utils.WriteErrorResponse(w, http.StatusNotFound, "component not found")
+			return
+		}
+		slog.ErrorContext(r.Context(), "delete component failed",
+			"error", err, "org", org, "project", projectName, "component", componentName)
+		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to delete component")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (c *componentController) TriggerBuild(w http.ResponseWriter, r *http.Request) {
@@ -246,4 +315,71 @@ func (c *componentController) GetBuildLogs(w http.ResponseWriter, r *http.Reques
 	}
 
 	utils.WriteSuccessResponse(w, http.StatusOK, logs)
+}
+
+func (c *componentController) GetComponentRepository(w http.ResponseWriter, r *http.Request) {
+	claims := jwtmw.ClaimsFromContext(r.Context())
+	if claims == nil || claims.OrgHandle == "" {
+		utils.WriteErrorResponse(w, http.StatusUnauthorized, "missing org context")
+		return
+	}
+	componentName := r.PathValue("componentName")
+	projectName := r.URL.Query().Get("projectName")
+
+	repo, err := c.service.GetComponentRepository(r.Context(), projectName, componentName)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "get component repository failed", "error", err, "component", componentName)
+		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to get component repository")
+		return
+	}
+
+	utils.WriteSuccessResponse(w, http.StatusOK, repo)
+}
+
+func (c *componentController) GetCommitHistory(w http.ResponseWriter, r *http.Request) {
+	claims := jwtmw.ClaimsFromContext(r.Context())
+	if claims == nil || claims.OrgHandle == "" {
+		utils.WriteErrorResponse(w, http.StatusUnauthorized, "missing org context")
+		return
+	}
+	componentName := r.PathValue("componentName")
+	branch := r.URL.Query().Get("branch")
+
+	list, err := c.service.GetCommitHistory(r.Context(), componentName, branch)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "get commit history failed", "error", err, "component", componentName)
+		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to get commit history")
+		return
+	}
+
+	utils.WriteSuccessResponse(w, http.StatusOK, list)
+}
+
+func (c *componentController) GetComponentLabels(w http.ResponseWriter, r *http.Request) {
+	claims := jwtmw.ClaimsFromContext(r.Context())
+	if claims == nil || claims.OrgHandle == "" {
+		utils.WriteErrorResponse(w, http.StatusUnauthorized, "missing org context")
+		return
+	}
+	projectName := r.URL.Query().Get("projectName")
+	orgIDStr := r.URL.Query().Get("orgId")
+
+	var orgID int
+	if orgIDStr != "" {
+		var parseErr error
+		orgID, parseErr = strconv.Atoi(orgIDStr)
+		if parseErr != nil {
+			utils.WriteErrorResponse(w, http.StatusBadRequest, "orgId must be an integer")
+			return
+		}
+	}
+
+	list, err := c.service.GetComponentLabels(r.Context(), projectName, orgID)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "get component labels failed", "error", err)
+		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to get component labels")
+		return
+	}
+
+	utils.WriteSuccessResponse(w, http.StatusOK, list)
 }

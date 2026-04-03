@@ -17,7 +17,6 @@
  */
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { gql } from './graphql';
 import { authenticatedFetch } from '../auth/tokenManager';
 import { icpClient } from './client';
 import { env } from '../config/env';
@@ -318,32 +317,17 @@ export function useComponentByHandler(projectName: string, handler: string | und
   });
 }
 
-const PROJECT_COMPONENT_LABELS_QUERY = `
-  query GetProjectComponentLabels($projectId: String!, $orgId: Int!) {
-    projectComponentLabels(projectId: $projectId, orgId: $orgId)
-  }`;
-
 export function useProjectComponentLabels(projectId: string) {
   const id = orgId();
   return useQuery({
     queryKey: ['projectComponentLabels', projectId],
-    queryFn: () => gql<{ projectComponentLabels: string[] }>(PROJECT_COMPONENT_LABELS_QUERY, { projectId, orgId: id }).then((d) => d.projectComponentLabels ?? []),
+    queryFn: () =>
+      icpClient
+        .get<{ items: string[] }>(`/components/${encodeURIComponent(projectId)}/labels`, { projectName: projectId, orgId: String(id) })
+        .then((d) => d.items ?? []),
     enabled: !!projectId && id > 0,
     staleTime: 5 * 60 * 1000,
   });
-}
-
-export interface BffEnvironment {
-  uid?: string;
-  name: string;
-  displayName?: string;
-  dataPlaneRef?: string;
-  isProduction?: boolean;
-  createdAt?: string;
-}
-
-export interface BffEnvironmentList {
-  items: BffEnvironment[];
 }
 
 export interface BffEnvironment {
@@ -369,7 +353,7 @@ export interface GqlEnvironment {
   createdAt?: string;
 }
 
-function mapEnvironment(e: BffEnvironment): GqlEnvironment {
+export function mapEnvironment(e: BffEnvironment): GqlEnvironment {
   return {
     id: e.name,
     name: e.displayName || e.name,
@@ -403,17 +387,13 @@ export interface GqlLogger {
   runtimeIds: string[];
 }
 
-const LOGGERS_BY_ENV_AND_COMPONENT_QUERY = `
-  query GetLoggers($environmentId: String!, $componentId: String!) {
-    loggersByEnvironmentAndComponent(environmentId: $environmentId, componentId: $componentId) {
-      componentName, logLevel, runtimeIds
-    }
-  }`;
-
 export function useLoggers(environmentId: string, componentId: string) {
   return useQuery({
     queryKey: ['loggers', environmentId, componentId],
-    queryFn: () => gql<{ loggersByEnvironmentAndComponent: GqlLogger[] }>(LOGGERS_BY_ENV_AND_COMPONENT_QUERY, { environmentId, componentId }).then((d) => d.loggersByEnvironmentAndComponent),
+    queryFn: () =>
+      icpClient
+        .get<{ items: GqlLogger[] }>(`/components/${encodeURIComponent(componentId)}/loggers`, { environmentId })
+        .then((d) => d.items ?? []),
     enabled: !!environmentId && !!componentId,
   });
 }
@@ -433,42 +413,27 @@ export interface GqlRuntime {
   component?: { displayName: string };
 }
 
-const RUNTIMES_QUERY = `
-  query GetRuntimes($environmentId: String!, $projectId: String!, $componentId: String!) {
-    runtimes(environmentId: $environmentId, projectId: $projectId, componentId: $componentId) {
-      runtimeId, runtimeType, status, version,
-      platformName, platformVersion, platformHome,
-      osName, osVersion, registrationTime, lastHeartbeat
-    }
-  }`;
-
 export function useRuntimes(envId: string, projectId: string, componentId: string) {
   return useQuery({
     queryKey: ['runtimes', envId, projectId, componentId],
-    queryFn: () => gql<{ runtimes: GqlRuntime[] }>(RUNTIMES_QUERY, { environmentId: envId, projectId, componentId }).then((d) => d.runtimes),
+    queryFn: () =>
+      icpClient
+        .get<{ items: GqlRuntime[] }>(`/components/${encodeURIComponent(componentId)}/runtimes`, { environmentId: envId, projectName: projectId })
+        .then((d) => d.items ?? []),
     enabled: !!envId && !!projectId && !!componentId,
   });
 }
 
-const PROJECT_RUNTIMES_QUERY = `
-  query GetProjectRuntimes($environmentId: String!, $projectId: String!) {
-    runtimes(environmentId: $environmentId, projectId: $projectId) {
-      runtimeId, runtimeType, status, version,
-      platformName, platformVersion, platformHome,
-      osName, osVersion, registrationTime, lastHeartbeat,
-      component { displayName }
-    }
-  }`;
-
 export function useProjectRuntimes(envId: string, projectId: string) {
   return useQuery({
     queryKey: ['projectRuntimes', envId, projectId],
-    queryFn: () => gql<{ runtimes: GqlRuntime[] }>(PROJECT_RUNTIMES_QUERY, { environmentId: envId, projectId }).then((d) => d.runtimes),
+    queryFn: () =>
+      icpClient
+        .get<{ items: GqlRuntime[] }>(`/projects/${encodeURIComponent(projectId)}/runtimes`, { environmentId: envId })
+        .then((d) => d.items ?? []),
     enabled: !!envId && !!projectId,
   });
 }
-
-export { RUNTIMES_QUERY, PROJECT_RUNTIMES_QUERY };
 
 export interface GqlArtifactType {
   artifactType: string;
@@ -479,14 +444,9 @@ export function useArtifactTypes(componentId: string, envId: string) {
   return useQuery({
     queryKey: ['artifactTypes', componentId, envId],
     queryFn: () =>
-      gql<{ componentArtifactTypes: GqlArtifactType[] }>(
-        `query ComponentArtifactTypes($componentId: String!, $environmentId: String!) {
-          componentArtifactTypes(componentId: $componentId, environmentId: $environmentId) {
-            artifactType, artifactCount
-          }
-        }`,
-        { componentId, environmentId: envId },
-      ).then((d) => d.componentArtifactTypes),
+      icpClient
+        .get<{ items: GqlArtifactType[] }>('/artifacts/types', { componentId, environmentId: envId })
+        .then((d) => d.items ?? []),
     enabled: !!componentId && !!envId,
   });
 }
@@ -583,39 +543,20 @@ export { ARTIFACT_QUERY_MAP };
 
 // ── Artifact detail panel queries ──
 
-const ARTIFACT_SOURCE_QUERY = `
-  query GetArtifactSource($environmentId: String!, $componentId: String!, $artifactType: String!, $artifactName: String!) {
-    artifactSourceByComponent(environmentId: $environmentId, componentId: $componentId, artifactType: $artifactType, artifactName: $artifactName)
-  }`;
-
 export function useArtifactSource(envId: string, componentId: string, artifactType: string, artifactName: string) {
   return useQuery({
     queryKey: ['artifactSource', envId, componentId, artifactType, artifactName],
     queryFn: () =>
-      gql<{ artifactSourceByComponent: string }>(ARTIFACT_SOURCE_QUERY, {
-        environmentId: envId,
-        componentId,
-        artifactType,
-        artifactName,
-      }).then((d) => d.artifactSourceByComponent),
+      icpClient.get<string>('/artifacts/source', { environmentId: envId, componentId, artifactType, artifactName }),
     enabled: !!envId && !!componentId && !!artifactType && !!artifactName,
   });
 }
-
-const LOCAL_ENTRY_VALUE_QUERY = `
-  query LocalEntryValue($componentId: String!, $entryName: String!, $environmentId: String) {
-    localEntryValueByComponent(componentId: $componentId, entryName: $entryName, environmentId: $environmentId)
-  }`;
 
 export function useLocalEntryValue(componentId: string, entryName: string, envId: string) {
   return useQuery({
     queryKey: ['localEntryValue', componentId, entryName, envId],
     queryFn: () =>
-      gql<{ localEntryValueByComponent: string }>(LOCAL_ENTRY_VALUE_QUERY, {
-        componentId,
-        entryName,
-        environmentId: envId,
-      }).then((d) => d.localEntryValueByComponent),
+      icpClient.get<string>('/artifacts/local-entry', { componentId, entryName, environmentId: envId }),
     enabled: !!componentId && !!entryName && !!envId,
   });
 }
@@ -642,57 +583,20 @@ export interface GqlArtifactParam {
   value: string;
 }
 
-const ARTIFACT_PARAMS_QUERY = `
-  query ArtifactParams($componentId: String!, $artifactType: String!, $artifactName: String!, $environmentId: String, $runtimeId: String) {
-    artifactParametersByComponent(
-      componentId: $componentId,
-      artifactType: $artifactType,
-      artifactName: $artifactName,
-      environmentId: $environmentId,
-      runtimeId: $runtimeId
-    ) {
-      name
-      value
-    }
-  }`;
-
 export function useArtifactParams(componentId: string, artifactType: string, artifactName: string, envId: string, runtimeId?: string) {
   return useQuery({
     queryKey: ['artifactParams', componentId, artifactType, artifactName, envId, runtimeId],
     queryFn: () =>
-      gql<{ artifactParametersByComponent: GqlArtifactParam[] }>(ARTIFACT_PARAMS_QUERY, {
-        componentId,
-        artifactType,
-        artifactName,
-        environmentId: envId,
-        runtimeId,
-      }).then((d) => d.artifactParametersByComponent),
+      icpClient.get<GqlArtifactParam[]>('/artifacts/params', { componentId, artifactType, artifactName, environmentId: envId, runtimeId }),
     enabled: !!componentId && !!artifactType && !!artifactName && !!envId,
   });
 }
-
-const ARTIFACT_WSDL_QUERY = `
-  query ArtifactWsdl($componentId: String!, $artifactType: String!, $artifactName: String!, $environmentId: String, $runtimeId: String) {
-    artifactWsdlByComponent(
-      componentId: $componentId,
-      artifactType: $artifactType,
-      artifactName: $artifactName,
-      environmentId: $environmentId,
-      runtimeId: $runtimeId
-    )
-  }`;
 
 export function useArtifactWsdl(componentId: string, artifactType: string, artifactName: string, envId: string, runtimeId?: string) {
   return useQuery({
     queryKey: ['artifactWsdl', componentId, artifactType, artifactName, envId, runtimeId],
     queryFn: () =>
-      gql<{ artifactWsdlByComponent: string }>(ARTIFACT_WSDL_QUERY, {
-        componentId,
-        artifactType,
-        artifactName,
-        environmentId: envId,
-        runtimeId,
-      }).then((d) => d.artifactWsdlByComponent),
+      icpClient.get<string>('/artifacts/wsdl', { componentId, artifactType, artifactName, environmentId: envId, runtimeId }),
     enabled: !!componentId && !!artifactType && !!artifactName && !!envId,
   });
 }
@@ -749,23 +653,19 @@ const COMPONENT_REPOSITORY_QUERY = `
 export function useComponentRepository(projectId: string, componentHandler: string) {
   return useQuery({
     queryKey: ['componentRepository', projectId, componentHandler],
-    queryFn: () => gql<{ component: { repository: GqlRepository } }>(COMPONENT_REPOSITORY_QUERY, { projectId, componentHandler }).then((d) => d.component?.repository ?? null),
+    queryFn: () =>
+      icpClient.get<GqlRepository>(`/components/${encodeURIComponent(componentHandler)}/repository`, { projectName: projectId }),
     enabled: !!projectId && !!componentHandler,
   });
 }
 
-const COMMIT_HISTORY_QUERY = `
-  query GetCommitHistory($componentId: String!, $branch: String!) {
-    commitHistory(componentId: $componentId, branch: $branch) {
-      sha, message, isLatest,
-      author { name, date, email, avatarUrl }
-    }
-  }`;
-
 export function useCommitHistory(componentId: string, branch: string) {
   return useQuery({
     queryKey: ['commitHistory', componentId, branch],
-    queryFn: () => gql<{ commitHistory: GqlCommit[] }>(COMMIT_HISTORY_QUERY, { componentId, branch }).then((d) => d.commitHistory ?? []),
+    queryFn: () =>
+      icpClient
+        .get<{ items: GqlCommit[] }>(`/components/${encodeURIComponent(componentId)}/commit-history`, { branch })
+        .then((d) => d.items ?? []),
     enabled: !!componentId && !!branch,
   });
 }
@@ -780,19 +680,12 @@ export interface GqlExecutionConfigs {
   retryCount?: number;
 }
 
-const EXECUTION_CONFIGS_QUERY = `
-  query GetExecutionConfigs($componentId: String!, $releaseId: String!) {
-    executionConfigs(componentId: $componentId, releaseId: $releaseId) {
-      cronjobFrequency, cronjobTimezone, cronjobAllowConcurrency, timeoutSeconds, retryCount
-    }
-  }`;
-
 export function useExecutionConfigs(componentId: string, releaseId: string) {
   return useQuery({
     queryKey: ['executionConfigs', componentId, releaseId],
     queryFn: () =>
-      gql<{ executionConfigs: GqlExecutionConfigs }>(EXECUTION_CONFIGS_QUERY, { componentId, releaseId })
-        .then((d) => d.executionConfigs)
+      icpClient
+        .get<GqlExecutionConfigs>(`/components/${encodeURIComponent(componentId)}/execution-configs`, { releaseId })
         .catch(() => null),
     enabled: !!componentId && !!releaseId,
     retry: false,
@@ -808,19 +701,12 @@ export interface GqlComponentDeployment {
   build?: { buildId: string };
 }
 
-const COMPONENT_DEPLOYMENT_QUERY = `
-  query GetComponentDeployment($orgHandler: String!, $orgUuid: String!, $componentId: String!, $versionId: String!, $environmentId: String!) {
-    componentDeployment(orgHandler: $orgHandler, orgUuid: $orgUuid, componentId: $componentId, versionId: $versionId, environmentId: $environmentId) {
-      releaseId, cron, cronTimezone, build { buildId }
-    }
-  }`;
-
 export function useComponentDeployment(orgHandler: string, orgUuid: string, componentId: string, versionId: string, environmentId: string) {
   return useQuery({
     queryKey: ['componentDeployment', orgHandler, componentId, versionId, environmentId],
     queryFn: () =>
-      gql<{ componentDeployment: GqlComponentDeployment }>(COMPONENT_DEPLOYMENT_QUERY, { orgHandler, orgUuid, componentId, versionId, environmentId })
-        .then((d) => d.componentDeployment)
+      icpClient
+        .get<GqlComponentDeployment>(`/components/${encodeURIComponent(componentId)}/deployments`, { orgHandler, orgUuid, versionId, environmentId })
         .catch(() => null),
     enabled: !!orgHandler && !!orgUuid && !!componentId && !!versionId && !!environmentId,
     retry: false,
@@ -856,8 +742,9 @@ export function useDeploymentStatus(componentId: string, versionId: string) {
   return useQuery({
     queryKey: ['deploymentStatus', componentId, versionId],
     queryFn: () =>
-      gql<{ deploymentStatusByVersion: GqlDeploymentStatus[] }>(DEPLOYMENT_STATUS_QUERY, { versionId, componentId })
-        .then((d) => d.deploymentStatusByVersion ?? []),
+      icpClient
+        .get<GqlDeploymentStatus[]>(`/components/${encodeURIComponent(componentId)}/deployments/status`, { versionId })
+        .catch(() => []),
     enabled: !!componentId && !!versionId,
     retry: false,
     refetchInterval: 15000,
@@ -892,17 +779,7 @@ export function useTaskExecutions(releaseId: string) {
   });
 }
 
-const EXECUTION_ARGUMENTS_QUERY = `
-  query GetExecutionArguments($id: String!, $componentId: String!, $releaseId: String!) {
-    execution(input: { id: $id, componentId: $componentId, releaseId: $releaseId }) {
-      arguments {
-        argumentName
-        argumentValue
-      }
-    }
-  }`;
-
-interface ExecutionArgument {
+export interface ExecutionArgument {
   argumentName: string;
   argumentValue: string;
 }
@@ -911,8 +788,9 @@ export function useExecutionArguments(runId: string, componentId: string, releas
   return useQuery({
     queryKey: ['executionArguments', runId, componentId, releaseId],
     queryFn: () =>
-      gql<{ execution: { arguments: ExecutionArgument[] } }>(EXECUTION_ARGUMENTS_QUERY, { id: runId, componentId, releaseId })
-        .then((d) => d.execution?.arguments ?? [])
+      icpClient
+        .get<ExecutionArgument[]>(`/components/${encodeURIComponent(componentId)}/executions/${encodeURIComponent(runId)}/arguments`, { releaseId })
+        .then((d) => d ?? [])
         .catch(() => []),
     enabled: enabled && !!runId && !!componentId && !!releaseId,
     retry: false,

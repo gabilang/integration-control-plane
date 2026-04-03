@@ -21,8 +21,8 @@ import { Trash2 } from '@wso2/oxygen-ui-icons-react';
 import SearchField from '../components/SearchField';
 import { useState, type JSX } from 'react';
 import { useQueries } from '@tanstack/react-query';
-import { gql } from '../api/graphql';
-import { useProjectByHandler, useEnvironments, useComponentByHandler, RUNTIMES_QUERY, PROJECT_RUNTIMES_QUERY, type GqlRuntime } from '../api/queries';
+import { icpClient } from '../api/client';
+import { useProjectByHandler, useEnvironments, useComponentByHandler, type GqlRuntime } from '../api/queries';
 import { useDeleteRuntime } from '../api/mutations';
 import { hasComponent, type ProjectScope, type ComponentScope } from '../nav';
 
@@ -51,7 +51,14 @@ export default function Runtime(scope: ProjectScope | ComponentScope): JSX.Eleme
   const runtimeQueries = useQueries({
     queries: environments.map((env) => ({
       queryKey: componentId ? ['runtimes', env.id, projectId, componentId] : ['runtimes', env.id, projectId],
-      queryFn: () => gql<{ runtimes: GqlRuntime[] }>(componentId ? RUNTIMES_QUERY : PROJECT_RUNTIMES_QUERY, componentId ? { environmentId: env.id, projectId, componentId } : { environmentId: env.id, projectId }).then((d) => d.runtimes),
+      queryFn: () =>
+        componentId
+          ? icpClient
+              .get<{ items: GqlRuntime[] }>(`/components/${encodeURIComponent(componentId)}/runtimes`, { environmentId: env.id, projectName: projectId })
+              .then((d) => d.items ?? [])
+          : icpClient
+              .get<{ items: GqlRuntime[] }>(`/projects/${encodeURIComponent(projectId)}/runtimes`, { environmentId: env.id })
+              .then((d) => d.items ?? []),
     })),
   });
 

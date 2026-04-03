@@ -17,6 +17,9 @@ var ErrEnvironmentNotFound = errors.New("environment not found")
 type EnvironmentService interface {
 	ListEnvironments(ctx context.Context, orgName string) (*models.EnvironmentList, error)
 	GetEnvironment(ctx context.Context, orgName, environmentName string) (*models.Environment, error)
+	CreateEnvironment(ctx context.Context, orgName string, req *models.CreateEnvironmentRequest) (*models.Environment, error)
+	UpdateEnvironment(ctx context.Context, orgName, environmentName string, req *models.UpdateEnvironmentRequest) (*models.Environment, error)
+	DeleteEnvironment(ctx context.Context, orgName, environmentName string) error
 }
 
 type environmentService struct {
@@ -43,6 +46,28 @@ func (s *environmentService) GetEnvironment(ctx context.Context, orgName, enviro
 	return env, nil
 }
 
+func (s *environmentService) CreateEnvironment(ctx context.Context, orgName string, req *models.CreateEnvironmentRequest) (*models.Environment, error) {
+	env, err := s.client.CreateEnvironment(ctx, orgName, req)
+	if err != nil {
+		return nil, translateEnvironmentError(err)
+	}
+	return env, nil
+}
+
+func (s *environmentService) UpdateEnvironment(ctx context.Context, orgName, environmentName string, req *models.UpdateEnvironmentRequest) (*models.Environment, error) {
+	env, err := s.client.UpdateEnvironment(ctx, orgName, environmentName, req)
+	if err != nil {
+		return nil, translateEnvironmentError(err)
+	}
+	return env, nil
+}
+
+func (s *environmentService) DeleteEnvironment(ctx context.Context, orgName, environmentName string) error {
+	if err := s.client.DeleteEnvironment(ctx, orgName, environmentName); err != nil {
+		return translateEnvironmentError(err)
+	}
+	return nil
+}
 func translateEnvironmentError(err error) error {
 	if err == nil {
 		return nil
