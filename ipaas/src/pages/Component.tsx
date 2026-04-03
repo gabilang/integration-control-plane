@@ -42,7 +42,7 @@ export default function Component(scope: ComponentScope): JSX.Element {
   const { data: component, isLoading: loadingComponent } = useComponentByHandler(projectId, scope.component);
   const { data: environments = [] } = useEnvironments(scope.org, projectId);
   const { data: repository } = useComponentRepository(projectId, scope.component);
-  const { data: commits = [] } = useCommitHistory(component?.id ?? '', repository?.branch ?? '');
+  const { data: commits = [] } = useCommitHistory(component?.id ?? '', repository?.branch ?? '', projectId);
   const [selectedArtifact, setSelectedArtifact] = useState<SelectedArtifact | null>(null);
 
   // Load component permissions using the UUID - only when component is loaded

@@ -345,8 +345,9 @@ func (c *componentController) GetCommitHistory(w http.ResponseWriter, r *http.Re
 	}
 	componentName := r.PathValue("componentName")
 	branch := r.URL.Query().Get("branch")
+	projectName := r.URL.Query().Get("projectName")
 
-	list, err := c.service.GetCommitHistory(r.Context(), componentName, branch)
+	list, err := c.service.GetCommitHistory(r.Context(), claims.OrgHandle, projectName, componentName, branch)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "get commit history failed", "error", err, "component", componentName)
 		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to get commit history")

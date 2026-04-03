@@ -35,7 +35,7 @@ type ComponentService interface {
 	GetBuildStatus(ctx context.Context, orgName, projectName, componentName, buildName string) (*models.WorkflowRun, error)
 	GetBuildLogs(ctx context.Context, orgName, projectName, componentName, buildName string) (*models.BuildLogs, error)
 	GetComponentRepository(ctx context.Context, projectID, componentHandler string) (*models.ComponentRepository, error)
-	GetCommitHistory(ctx context.Context, componentID, branch string) (*models.CommitList, error)
+	GetCommitHistory(ctx context.Context, orgName, projectName, componentName, branch string) (*models.CommitList, error)
 	GetComponentLabels(ctx context.Context, projectID string, orgID int) (*models.LabelList, error)
 	GetDeploymentTrack(ctx context.Context, componentName string) (*models.DeploymentTrack, error)
 }
@@ -282,29 +282,50 @@ func (s *componentService) GetDeploymentTrack(ctx context.Context, componentName
 	return track, nil
 }
 
-func (s *componentService) GetCommitHistory(ctx context.Context, componentName, branch string) (*models.CommitList, error) {
-	// ICP GraphQL commitHistory requires the component's internal UID, not the K8s name.
-	comp, err := s.client.GetComponent(ctx, componentName)
-	if err != nil {
-		return nil, fmt.Errorf("get commit history: resolve component: %w", err)
+func (s *componentService) GetCommitHistory(ctx context.Context, orgName, projectName, componentName, branch string) (*models.CommitList, error) {
+	// Try ICP GraphQL first (uses the component's K8s UID as componentId).
+	if s.icpClient.IsAvailable() {
+		comp, err := s.client.GetComponent(ctx, componentName)
+		if err == nil && comp.UID != "" {
+			data, icpErr := s.icpClient.Query(ctx, commitHistoryQuery, map[string]string{
+				"componentId": comp.UID,
+				"branch":      branch,
+			})
+			if icpErr == nil {
+				raw, ok := data["commitHistory"]
+				if ok {
+					var items []models.Commit
+					if jsonErr := json.Unmarshal(raw, &items); jsonErr == nil {
+						if items == nil {
+							items = []models.Commit{}
+						}
+						return &models.CommitList{Items: items}, nil
+					}
+				}
+			}
+			slog.WarnContext(ctx, "icp commit history unavailable, falling back to workflow runs",
+				"component", componentName, "error", err)
+		}
 	}
-	data, err := s.icpClient.Query(ctx, commitHistoryQuery, map[string]string{
-		"componentId": comp.UID,
-		"branch":      branch,
-	})
+
+	// Fallback: derive commit history from OpenChoreo workflow runs.
+	// Each run records the git-revision (commit SHA) of the source it built.
+	runs, err := s.client.ListWorkflowRuns(ctx, orgName, projectName, componentName, 20, "")
 	if err != nil {
 		return nil, fmt.Errorf("get commit history: %w", err)
 	}
-	raw, ok := data["commitHistory"]
-	if !ok {
-		return &models.CommitList{Items: []models.Commit{}}, nil
-	}
-	var items []models.Commit
-	if err := json.Unmarshal(raw, &items); err != nil {
-		return nil, fmt.Errorf("get commit history: parse: %w", err)
-	}
-	if items == nil {
-		items = []models.Commit{}
+	items := make([]models.Commit, 0, len(runs.Items))
+	for i, run := range runs.Items {
+		if run.Commit == "" {
+			continue
+		}
+		items = append(items, models.Commit{
+			SHA:      run.Commit,
+			IsLatest: i == 0,
+			Author: models.CommitAuthor{
+				Date: run.CompletedAt,
+			},
+		})
 	}
 	return &models.CommitList{Items: items}, nil
 }

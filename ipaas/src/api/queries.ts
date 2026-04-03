@@ -660,12 +660,12 @@ export function useComponentRepository(projectId: string, componentHandler: stri
   });
 }
 
-export function useCommitHistory(componentId: string, branch: string) {
+export function useCommitHistory(componentId: string, branch: string, projectName?: string) {
   return useQuery({
     queryKey: ['commitHistory', componentId, branch],
     queryFn: () =>
       icpClient
-        .get<{ items: GqlCommit[] }>(`/components/${encodeURIComponent(componentId)}/commit-history`, { branch })
+        .get<{ items: GqlCommit[] }>(`/components/${encodeURIComponent(componentId)}/commit-history`, { branch, ...(projectName ? { projectName } : {}) })
         .then((d) => d.items ?? []),
     enabled: !!componentId && !!branch,
   });
