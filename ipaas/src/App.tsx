@@ -21,6 +21,7 @@ import { Route, Routes } from 'react-router';
 import routes, { type AppRoute } from './config/routes';
 import { useAsgardeo } from './auth';
 import { setTokenAccessor } from './api/client';
+import ErrorBoundary from './components/ErrorBoundary';
 import './App.css';
 
 function renderRoutes(routeList: AppRoute[]): JSX.Element[] {
@@ -41,7 +42,7 @@ function App() {
   // Wire the Asgardeo access token into the REST API client so every
   // icpClient request carries Authorization: Bearer <token>.
   setTokenAccessor(isSignedIn ? getAccessToken : null);
-  return <Routes>{renderRoutes(routes)}</Routes>;
+  return <ErrorBoundary><Routes>{renderRoutes(routes)}</Routes></ErrorBoundary>;
 }
 
 export default App;

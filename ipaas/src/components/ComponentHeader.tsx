@@ -23,8 +23,7 @@ import { type GqlComponentDetail, type GqlProject, type GqlRepository, type GqlC
 import { useUpdateComponent } from '../api/mutations';
 import LabelDialog from './LabelDialog';
 import { formatDistanceToNow } from '../utils/time';
-import { useAuth } from '../auth/AuthContext';
-import { getOrgUuidFromToken } from '../auth/tokenManager';
+import { getOrgUuidFromToken, getUserIdFromToken } from '../auth/tokenManager';
 
 function buildRepoUrl(repo: GqlRepository): string {
   const { gitProvider, organizationApp, nameApp, branch, appSubPath, bitbucketServerUrl, serverUrl, projectApp } = repo;
@@ -63,7 +62,7 @@ interface ComponentHeaderProps {
 }
 
 export default function ComponentHeader({ component, project, repository, latestCommit, orgHandler, projectId }: ComponentHeaderProps) {
-  const { userId } = useAuth();
+  const userId = getUserIdFromToken();
   const [copied, setCopied] = useState(false);
   const [splitOpen, setSplitOpen] = useState(false);
   const splitButtonRef = useRef<HTMLDivElement>(null);

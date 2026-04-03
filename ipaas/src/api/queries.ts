@@ -874,7 +874,7 @@ export function useSchemaConfig(projectId: string, componentId: string, envId: s
   return useQuery({
     queryKey: ['schemaConfig', projectId, componentId, envId, deploymentTrackId, commitHash],
     queryFn: async (): Promise<SchemaConfigData | null> => {
-      const base = new URL(window.API_CONFIG.graphqlUrl).origin;
+      const base = new URL(window.API_CONFIG?.graphqlUrl ?? '').origin;
       const qs = commitHash ? `?commitHash=${encodeURIComponent(commitHash)}` : '';
       const url = `${base}/configuration-schema/v1.0/projects/${projectId}/components/${componentId}/env-template/${envId}/deployment-track/${deploymentTrackId}/configurations${qs}`;
       const res = await authenticatedFetch(url);

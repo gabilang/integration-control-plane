@@ -157,6 +157,13 @@ func normalizeWorkflowRun(run ocWorkflowRun) models.WorkflowRun {
 			}
 		}
 	}
+	// Fallback: read commit from the run spec (set when the build is triggered).
+	if commit == "" && run.Spec.Workflow != nil &&
+		run.Spec.Workflow.Parameters != nil &&
+		run.Spec.Workflow.Parameters.Repository != nil &&
+		run.Spec.Workflow.Parameters.Repository.Revision != nil {
+		commit = run.Spec.Workflow.Parameters.Repository.Revision.Commit
+	}
 
 	return models.WorkflowRun{
 		Name:          run.Metadata.Name,

@@ -473,3 +473,14 @@ export function getOrgUuidFromToken(): string | null {
     return null;
   }
 }
+
+export function getUserIdFromToken(): string {
+  const token = getAccessToken();
+  if (!token) return '';
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return (payload.sub as string) ?? '';
+  } catch {
+    return '';
+  }
+}

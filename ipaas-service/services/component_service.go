@@ -314,16 +314,17 @@ func (s *componentService) GetCommitHistory(ctx context.Context, orgName, projec
 	if err != nil {
 		return nil, fmt.Errorf("get commit history: %w", err)
 	}
+	slog.DebugContext(ctx, "commit history fallback: workflow runs", "component", componentName, "total_runs", len(runs.Items))
 	items := make([]models.Commit, 0, len(runs.Items))
-	for i, run := range runs.Items {
+	for _, run := range runs.Items {
 		if run.Commit == "" {
 			continue
 		}
 		items = append(items, models.Commit{
 			SHA:      run.Commit,
-			IsLatest: i == 0,
+			IsLatest: len(items) == 0, // first appended item is latest
 			Author: models.CommitAuthor{
-				Date: run.CompletedAt,
+				Date: run.StartedAt,
 			},
 		})
 	}
