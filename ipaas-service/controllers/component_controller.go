@@ -27,6 +27,7 @@ type ComponentController interface {
 	GetComponentRepository(w http.ResponseWriter, r *http.Request)
 	GetCommitHistory(w http.ResponseWriter, r *http.Request)
 	GetComponentLabels(w http.ResponseWriter, r *http.Request)
+	GetDeploymentTrack(w http.ResponseWriter, r *http.Request)
 }
 
 type componentController struct {
@@ -382,4 +383,22 @@ func (c *componentController) GetComponentLabels(w http.ResponseWriter, r *http.
 	}
 
 	utils.WriteSuccessResponse(w, http.StatusOK, list)
+}
+
+func (c *componentController) GetDeploymentTrack(w http.ResponseWriter, r *http.Request) {
+	claims := jwtmw.ClaimsFromContext(r.Context())
+	if claims == nil || claims.OrgHandle == "" {
+		utils.WriteErrorResponse(w, http.StatusUnauthorized, "missing org context")
+		return
+	}
+	componentName := r.PathValue("componentName")
+
+	track, err := c.service.GetDeploymentTrack(r.Context(), componentName)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "get deployment track failed", "error", err, "component", componentName)
+		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to get deployment track")
+		return
+	}
+
+	utils.WriteSuccessResponse(w, http.StatusOK, track)
 }

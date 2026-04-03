@@ -138,6 +138,9 @@ type ComponentRepository struct {
 	BitbucketServerURL string `json:"bitbucketServerUrl,omitempty"`
 	ServerURL          string `json:"serverUrl,omitempty"`
 	ProjectApp         string `json:"projectApp,omitempty"`
+	// TreeURL is the browser-navigable URL to the repository tree at the component branch,
+	// e.g. https://github.com/org/repo/tree/main
+	TreeURL string `json:"treeUrl,omitempty"`
 }
 
 type Commit struct {
@@ -160,4 +163,13 @@ type CommitList struct {
 
 type LabelList struct {
 	Items []string `json:"items"`
+}
+
+// DeploymentTrack holds the deployment branch and latest commit SHA
+// configured on a component's workflow spec in OpenChoreo.
+type DeploymentTrack struct {
+	Branch    string `json:"branch,omitempty"`
+	CommitSHA string `json:"commitSha,omitempty"`
+	URL       string `json:"url,omitempty"`
+	AppPath   string `json:"appPath,omitempty"`
 }

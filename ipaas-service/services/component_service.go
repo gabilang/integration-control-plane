@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/wso2/integration-control-plane/ipaas-service/clients/icp"
 	"github.com/wso2/integration-control-plane/ipaas-service/clients/observability"
@@ -35,6 +37,7 @@ type ComponentService interface {
 	GetComponentRepository(ctx context.Context, projectID, componentHandler string) (*models.ComponentRepository, error)
 	GetCommitHistory(ctx context.Context, componentID, branch string) (*models.CommitList, error)
 	GetComponentLabels(ctx context.Context, projectID string, orgID int) (*models.LabelList, error)
+	GetDeploymentTrack(ctx context.Context, componentName string) (*models.DeploymentTrack, error)
 }
 
 type componentService struct {
@@ -173,35 +176,110 @@ func translateBuildHTTPError(err error) error {
 }
 
 const (
-	componentRepositoryQuery = `query GetComponentRepository($projectId: String!, $componentHandler: String!) { component(projectId: $projectId, componentHandler: $componentHandler) { repository { gitProvider, organizationApp, nameApp, branch, appSubPath, bitbucketServerUrl, serverUrl, projectApp } } }`
-	commitHistoryQuery       = `query GetCommitHistory($componentId: String!, $branch: String!) { commitHistory(componentId: $componentId, branch: $branch) { sha, message, isLatest, author { name, date, email, avatarUrl } } }`
-	projectLabelsQuery       = `query GetProjectComponentLabels($projectId: String!, $orgId: Int!) { projectComponentLabels(projectId: $projectId, orgId: $orgId) }`
+	commitHistoryQuery = `query GetCommitHistory($componentId: String!, $branch: String!) { commitHistory(componentId: $componentId, branch: $branch) { sha, message, isLatest, author { name, date, email, avatarUrl } } }`
+	projectLabelsQuery = `query GetProjectComponentLabels($projectId: String!, $orgId: Int!) { projectComponentLabels(projectId: $projectId, orgId: $orgId) }`
 )
 
-type componentQueryResp struct {
-	Repository *models.ComponentRepository `json:"repository"`
-}
-
-func (s *componentService) GetComponentRepository(ctx context.Context, projectID, componentHandler string) (*models.ComponentRepository, error) {
-	data, err := s.icpClient.Query(ctx, componentRepositoryQuery, map[string]string{
-		"projectId":        projectID,
-		"componentHandler": componentHandler,
-	})
+// GetComponentRepository fetches repository config from the OpenChoreo component
+// spec (spec.workflow.parameters.repository). The projectID parameter is kept for
+// interface compatibility but is not used — the componentName path param is sufficient.
+func (s *componentService) GetComponentRepository(ctx context.Context, _, componentName string) (*models.ComponentRepository, error) {
+	track, err := s.client.GetDeploymentTrack(ctx, componentName)
 	if err != nil {
 		return nil, fmt.Errorf("get component repository: %w", err)
 	}
-	raw, ok := data["component"]
-	if !ok {
-		return nil, fmt.Errorf("get component repository: missing field")
+
+	repo := &models.ComponentRepository{
+		Branch:     track.Branch,
+		AppSubPath: track.AppPath,
 	}
-	var resp componentQueryResp
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		return nil, fmt.Errorf("get component repository: parse: %w", err)
+
+	// Derive gitProvider, organizationApp, and nameApp from the repository URL.
+	// URL format: https://{host}/{org}/{repo}[.git]
+	if track.URL != "" {
+		repo.ServerURL = track.URL
+		parts := splitRepoURL(track.URL)
+		if len(parts) >= 3 {
+			repo.GitProvider = parts[0]
+			repo.OrganizationApp = parts[1]
+			repo.NameApp = parts[2]
+		}
 	}
-	if resp.Repository == nil {
-		return &models.ComponentRepository{}, nil
+
+	repo.TreeURL = buildTreeURL(repo.GitProvider, repo.OrganizationApp, repo.NameApp, repo.Branch, repo.AppSubPath, repo.ServerURL)
+	return repo, nil
+}
+
+// buildTreeURL constructs a browser-navigable URL to the repository tree at the given branch.
+// For GitHub: https://github.com/{org}/{repo}/tree/{branch}[/{subPath}]
+// For Bitbucket: https://bitbucket.org/{org}/{repo}/src/HEAD/{subPath}?at={branch}
+// For GitLab: https://gitlab.com/{org}/{repo}/-/tree/{branch}[/{subPath}]
+func buildTreeURL(provider, org, repo, branch, subPath, rawURL string) string {
+	encodedBranch := url.PathEscape(branch)
+	switch provider {
+	case "github":
+		base := "https://github.com/" + org + "/" + repo + "/tree/" + encodedBranch
+		if subPath != "" {
+			base += "/" + strings.TrimPrefix(subPath, "/")
+		}
+		return base
+	case "bitbucket":
+		base := "https://bitbucket.org/" + org + "/" + repo + "/src/HEAD"
+		if subPath != "" {
+			base += "/" + strings.TrimPrefix(subPath, "/")
+		}
+		return base + "?at=" + encodedBranch
+	case "gitlab":
+		base := "https://gitlab.com/" + org + "/" + repo + "/-/tree/" + encodedBranch
+		if subPath != "" {
+			base += "/" + strings.TrimPrefix(subPath, "/")
+		}
+		return base
+	default:
+		// Fall back to the raw clone URL when the provider is unknown.
+		return rawURL
 	}
-	return resp.Repository, nil
+}
+
+// splitRepoURL parses a git URL into [gitProvider, org, repo] components.
+// Examples:
+//
+//	https://github.com/myorg/myrepo.git → ["github", "myorg", "myrepo"]
+//	https://gitlab.com/myorg/myrepo     → ["gitlab", "myorg", "myrepo"]
+func splitRepoURL(rawURL string) []string {
+	// Strip scheme
+	s := rawURL
+	for _, prefix := range []string{"https://", "http://", "git@", "ssh://"} {
+		if after, ok := strings.CutPrefix(s, prefix); ok {
+			s = after
+			break
+		}
+	}
+	// git@github.com:org/repo → github.com/org/repo
+	if idx := strings.Index(s, ":"); idx != -1 && !strings.Contains(s[:idx], "/") {
+		s = s[:idx] + "/" + s[idx+1:]
+	}
+	segs := strings.SplitN(s, "/", 3)
+	if len(segs) < 3 {
+		return nil
+	}
+	host := strings.ToLower(segs[0])
+	org := segs[1]
+	repo := strings.TrimSuffix(segs[2], ".git")
+
+	provider := host
+	if idx := strings.Index(host, "."); idx != -1 {
+		provider = host[:idx]
+	}
+	return []string{provider, org, repo}
+}
+
+func (s *componentService) GetDeploymentTrack(ctx context.Context, componentName string) (*models.DeploymentTrack, error) {
+	track, err := s.client.GetDeploymentTrack(ctx, componentName)
+	if err != nil {
+		return nil, fmt.Errorf("get deployment track: %w", err)
+	}
+	return track, nil
 }
 
 func (s *componentService) GetCommitHistory(ctx context.Context, componentID, branch string) (*models.CommitList, error) {

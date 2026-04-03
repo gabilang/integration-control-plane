@@ -19,4 +19,5 @@ func registerComponentRoutes(mux *http.ServeMux, c controllers.ComponentControll
 	mux.HandleFunc("GET /components/{componentName}/repository", c.GetComponentRepository)
 	mux.HandleFunc("GET /components/{componentName}/commit-history", c.GetCommitHistory)
 	mux.HandleFunc("GET /components/{componentName}/labels", c.GetComponentLabels)
+	mux.HandleFunc("GET /components/{componentName}/deployment-track", c.GetDeploymentTrack)
 }

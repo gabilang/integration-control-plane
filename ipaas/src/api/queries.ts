@@ -624,6 +624,7 @@ export interface GqlRepository {
   projectApp?: string;
   isBuildConfigurationMigrated?: boolean;
   buildpackConfig?: GqlBuildpackConfig[];
+  treeUrl?: string;
 }
 
 export interface GqlCommit {

@@ -174,7 +174,7 @@ export default function ComponentHeader({ component, project, repository, latest
   const envMatch = (window.API_CONFIG?.choreoOrgApiUrl ?? '').match(/\/\/apis\.([^.]+)\.choreo\.dev/);
   const devantOrigin = envMatch ? `https://${envMatch[1]}.devant.dev` : null;
 
-  const repoUrl = repository ? buildRepoUrl(repository) : null;
+  const repoUrl = repository?.treeUrl ?? (repository ? buildRepoUrl(repository) : null);
 
   const handleOpenInCloud = () => {
     if (!devantOrigin) return;

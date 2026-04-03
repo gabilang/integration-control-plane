@@ -23,6 +23,7 @@ type ComponentClient interface {
 	PatchComponentParameters(ctx context.Context, componentName string, params *ComponentParameters) error
 	DeleteComponent(ctx context.Context, orgName, projectName, componentName string) error
 	UpdateComponent(ctx context.Context, orgName, projectName, componentName string, req *models.UpdateComponentRequest) (*models.Component, error)
+	GetDeploymentTrack(ctx context.Context, componentName string) (*models.DeploymentTrack, error)
 }
 
 type componentClient struct {
@@ -400,4 +401,27 @@ func (c *componentClient) UpdateComponent(ctx context.Context, _, _, componentNa
 	}
 	comp := normalizeComponent(raw)
 	return &comp, nil
+}
+
+// GetDeploymentTrack returns the branch and commit SHA from a component's
+// workflow spec, representing the configured deployment track.
+func (c *componentClient) GetDeploymentTrack(ctx context.Context, componentName string) (*models.DeploymentTrack, error) {
+	httpReq := c.newRequest(ctx, "openchoreo.GetDeploymentTrack", http.MethodGet, c.componentURL(componentName))
+	result := requests.SendRequest(ctx, c.httpClient, httpReq)
+	var raw ocComponent
+	if err := result.ScanResponse(&raw, http.StatusOK); err != nil {
+		return nil, fmt.Errorf("get deployment track: %w", err)
+	}
+
+	track := &models.DeploymentTrack{}
+	if raw.Spec.Workflow != nil && raw.Spec.Workflow.Parameters != nil && raw.Spec.Workflow.Parameters.Repository != nil {
+		repo := raw.Spec.Workflow.Parameters.Repository
+		track.URL = repo.URL
+		track.AppPath = repo.AppPath
+		if repo.Revision != nil {
+			track.Branch = repo.Revision.Branch
+			track.CommitSHA = repo.Revision.Commit
+		}
+	}
+	return track, nil
 }
