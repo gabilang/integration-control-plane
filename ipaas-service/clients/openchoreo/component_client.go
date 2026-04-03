@@ -14,6 +14,7 @@ import (
 // ComponentClient defines operations for managing OpenChoreo components.
 type ComponentClient interface {
 	ListComponents(ctx context.Context, orgName, projectName string, limit int, cursor string) (*models.ComponentList, error)
+	GetComponent(ctx context.Context, componentName string) (*models.Component, error)
 	CreateComponent(ctx context.Context, orgName, projectName string, req *models.CreateComponentRequest) (*models.Component, error)
 	UpdateBuildParameters(ctx context.Context, orgName, projectName, componentName string, req *models.UpdateBuildParametersRequest) (*models.Component, error)
 	TriggerBuild(ctx context.Context, orgName, projectName, componentName string) (*models.WorkflowRun, error)
@@ -398,6 +399,18 @@ func (c *componentClient) UpdateComponent(ctx context.Context, _, _, componentNa
 	var raw ocComponent
 	if err := result.ScanResponse(&raw, http.StatusOK); err != nil {
 		return nil, fmt.Errorf("update component: %w", err)
+	}
+	comp := normalizeComponent(raw)
+	return &comp, nil
+}
+
+// GetComponent fetches a single component from OpenChoreo.
+func (c *componentClient) GetComponent(ctx context.Context, componentName string) (*models.Component, error) {
+	httpReq := c.newRequest(ctx, "openchoreo.GetComponent", http.MethodGet, c.componentURL(componentName))
+	result := requests.SendRequest(ctx, c.httpClient, httpReq)
+	var raw ocComponent
+	if err := result.ScanResponse(&raw, http.StatusOK); err != nil {
+		return nil, fmt.Errorf("get component: %w", err)
 	}
 	comp := normalizeComponent(raw)
 	return &comp, nil

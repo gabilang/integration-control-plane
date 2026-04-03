@@ -282,9 +282,14 @@ func (s *componentService) GetDeploymentTrack(ctx context.Context, componentName
 	return track, nil
 }
 
-func (s *componentService) GetCommitHistory(ctx context.Context, componentID, branch string) (*models.CommitList, error) {
+func (s *componentService) GetCommitHistory(ctx context.Context, componentName, branch string) (*models.CommitList, error) {
+	// ICP GraphQL commitHistory requires the component's internal UID, not the K8s name.
+	comp, err := s.client.GetComponent(ctx, componentName)
+	if err != nil {
+		return nil, fmt.Errorf("get commit history: resolve component: %w", err)
+	}
 	data, err := s.icpClient.Query(ctx, commitHistoryQuery, map[string]string{
-		"componentId": componentID,
+		"componentId": comp.UID,
 		"branch":      branch,
 	})
 	if err != nil {
