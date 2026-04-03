@@ -281,7 +281,7 @@ export default function Project(scope: ProjectScope): JSX.Element {
             onRefresh={refetchComponents}
             scope={scope}
             projectId={projectId}
-            onSelect={(handler) => navigate(componentOverviewUrl(scope.org, projectId, handler))}
+            onSelect={(handler) => navigate(componentOverviewUrl(scope.org, scope.project, handler))}
           />
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
