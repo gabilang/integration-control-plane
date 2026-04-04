@@ -97,7 +97,7 @@ func normalizeComponent(comp ocComponent) models.Component {
 		componentType = labels["openchoreo.dev/component-type"]
 	}
 
-	return models.Component{
+	c := models.Component{
 		UID:         comp.Metadata.UID,
 		Name:        comp.Metadata.Name,
 		ProjectName: projectName,
@@ -109,6 +109,41 @@ func normalizeComponent(comp ocComponent) models.Component {
 		CreatedAt:   comp.Metadata.CreationTimestamp,
 		Status:      latestConditionReason(comp.Status.Conditions),
 	}
+
+	// Synthesize a single deployment track from the component's workflow spec.
+	if track := buildDeploymentTrack(comp); track != nil {
+		c.DeploymentTracks = []models.DeploymentTrack{*track}
+	}
+
+	return c
+}
+
+// buildDeploymentTrack creates a DeploymentTrack from the component's workflow
+// spec. Returns nil if the component has no workflow/repository configured.
+func buildDeploymentTrack(comp ocComponent) *models.DeploymentTrack {
+	if comp.Spec.Workflow == nil || comp.Spec.Workflow.Parameters == nil ||
+		comp.Spec.Workflow.Parameters.Repository == nil {
+		return nil
+	}
+
+	repo := comp.Spec.Workflow.Parameters.Repository
+	track := &models.DeploymentTrack{
+		ID:                comp.Metadata.UID,
+		ComponentID:       comp.Metadata.Name,
+		Latest:            true,
+		AutoDeployEnabled: comp.Spec.AutoDeploy,
+		CreatedAt:         comp.Metadata.CreationTimestamp,
+		UpdatedAt:         comp.Metadata.CreationTimestamp,
+		URL:               repo.URL,
+		AppPath:           repo.AppPath,
+	}
+
+	if repo.Revision != nil {
+		track.Branch = repo.Revision.Branch
+		track.CommitSHA = repo.Revision.Commit
+	}
+
+	return track
 }
 
 // normalizeWorkflowRun converts a K8s-style OpenChoreo workflow run into the
@@ -423,8 +458,8 @@ func (c *componentClient) GetComponent(ctx context.Context, componentName string
 	return &comp, nil
 }
 
-// GetDeploymentTrack returns the branch and commit SHA from a component's
-// workflow spec, representing the configured deployment track.
+// GetDeploymentTrack returns the deployment track synthesized from a
+// component's workflow spec in OpenChoreo.
 func (c *componentClient) GetDeploymentTrack(ctx context.Context, componentName string) (*models.DeploymentTrack, error) {
 	httpReq := c.newRequest(ctx, "openchoreo.GetDeploymentTrack", http.MethodGet, c.componentURL(componentName))
 	result := requests.SendRequest(ctx, c.httpClient, httpReq)
@@ -433,15 +468,9 @@ func (c *componentClient) GetDeploymentTrack(ctx context.Context, componentName 
 		return nil, fmt.Errorf("get deployment track: %w", err)
 	}
 
-	track := &models.DeploymentTrack{}
-	if raw.Spec.Workflow != nil && raw.Spec.Workflow.Parameters != nil && raw.Spec.Workflow.Parameters.Repository != nil {
-		repo := raw.Spec.Workflow.Parameters.Repository
-		track.URL = repo.URL
-		track.AppPath = repo.AppPath
-		if repo.Revision != nil {
-			track.Branch = repo.Revision.Branch
-			track.CommitSHA = repo.Revision.Commit
-		}
+	track := buildDeploymentTrack(raw)
+	if track == nil {
+		return &models.DeploymentTrack{}, nil
 	}
 	return track, nil
 }

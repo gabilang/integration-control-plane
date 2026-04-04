@@ -2,16 +2,17 @@ package models
 
 // Component is the API response for a component resource.
 type Component struct {
-	UID         string `json:"uid,omitempty"`
-	Name        string `json:"name"`
-	ProjectName string `json:"projectName,omitempty"`
-	DisplayName string `json:"displayName,omitempty"`
-	Description string `json:"description,omitempty"`
-	Type        string `json:"type,omitempty"`
-	AutoDeploy  bool   `json:"autoDeploy,omitempty"`
-	AutoBuild   bool   `json:"autoBuild,omitempty"`
-	CreatedAt   string `json:"createdAt,omitempty"`
-	Status      string `json:"status,omitempty"`
+	UID              string            `json:"uid,omitempty"`
+	Name             string            `json:"name"`
+	ProjectName      string            `json:"projectName,omitempty"`
+	DisplayName      string            `json:"displayName,omitempty"`
+	Description      string            `json:"description,omitempty"`
+	Type             string            `json:"type,omitempty"`
+	AutoDeploy       bool              `json:"autoDeploy,omitempty"`
+	AutoBuild        bool              `json:"autoBuild,omitempty"`
+	CreatedAt        string            `json:"createdAt,omitempty"`
+	Status           string            `json:"status,omitempty"`
+	DeploymentTracks []DeploymentTrack `json:"deploymentTracks,omitempty"`
 }
 
 // ComponentList is the paginated list response for components.
@@ -165,11 +166,17 @@ type LabelList struct {
 	Items []string `json:"items"`
 }
 
-// DeploymentTrack holds the deployment branch and latest commit SHA
-// configured on a component's workflow spec in OpenChoreo.
+// DeploymentTrack represents a deployment track (branch-based versioning)
+// synthesized from a component's workflow spec in OpenChoreo.
 type DeploymentTrack struct {
-	Branch    string `json:"branch,omitempty"`
-	CommitSHA string `json:"commitSha,omitempty"`
-	URL       string `json:"url,omitempty"`
-	AppPath   string `json:"appPath,omitempty"`
+	ID                string `json:"id,omitempty"`
+	Branch            string `json:"branch,omitempty"`
+	CommitSHA         string `json:"commitSha,omitempty"`
+	URL               string `json:"url,omitempty"`
+	AppPath           string `json:"appPath,omitempty"`
+	ComponentID       string `json:"componentId,omitempty"`
+	Latest            bool   `json:"latest"`
+	AutoDeployEnabled bool   `json:"autoDeployEnabled"`
+	CreatedAt         string `json:"createdAt,omitempty"`
+	UpdatedAt         string `json:"updatedAt,omitempty"`
 }

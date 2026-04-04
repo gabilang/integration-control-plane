@@ -21,11 +21,10 @@ import { ChevronDown, ChevronUp, GitCommit, List } from '@wso2/oxygen-ui-icons-r
 import { InProgressIcon, SuccessIcon, QueuedIcon, FailedIcon } from './StatusIcons';
 import React, { useEffect, useRef, useState } from 'react';
 import { fetchBuildRunLogs, type BuildRunLogs } from '../api/builds';
-import { useDeploymentStatus, type GqlCommit } from '../api/queries';
+import { useBuilds, type GqlCommit } from '../api/queries';
 
 interface BuildCardProps {
   componentId: string;
-  versionId: string;
   orgHandler: string;
   projectId: string;
   latestCommit?: GqlCommit | null;
@@ -109,8 +108,8 @@ function buildLogText(logs: BuildRunLogs | null): string | null {
   return lines.join('\n') || '';
 }
 
-export default function BuildCard({ componentId, versionId, orgHandler, projectId, latestCommit }: BuildCardProps) {
-  const { data: deployments = [] } = useDeploymentStatus(componentId, versionId);
+export default function BuildCard({ componentId, orgHandler, projectId, latestCommit }: BuildCardProps) {
+  const { data: deployments = [] } = useBuilds(componentId, projectId);
   const lastBuild = deployments[0] ?? null;
 
   const [expanded, setExpanded] = useState(true);

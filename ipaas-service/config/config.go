@@ -8,6 +8,7 @@ type Config struct {
 	PlatformAPI   PlatformAPIConfig
 	Observability ObservabilityConfig
 	ICP           ICPConfig
+	GitHub        GitHubConfig
 }
 
 // PlatformAPIConfig holds connection settings for the platform-api-service,
@@ -31,4 +32,12 @@ type ObservabilityConfig struct {
 type ICPConfig struct {
 	GraphQLURL  string
 	AuthBaseURL string
+}
+
+// GitHubConfig holds connection settings for the GitHub REST API.
+// BaseURL defaults to "https://api.github.com". Token is optional; when empty,
+// unauthenticated requests are used (subject to lower rate limits).
+type GitHubConfig struct {
+	BaseURL string
+	Token   string
 }

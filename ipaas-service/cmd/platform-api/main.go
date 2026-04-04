@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/wso2/integration-control-plane/ipaas-service/api"
+	ghclient "github.com/wso2/integration-control-plane/ipaas-service/clients/github"
 	"github.com/wso2/integration-control-plane/ipaas-service/clients/icp"
 	k8sclient "github.com/wso2/integration-control-plane/ipaas-service/clients/k8s"
 	"github.com/wso2/integration-control-plane/ipaas-service/clients/observability"
@@ -52,7 +53,9 @@ func main() {
 	artifactService := services.NewArtifactService(icpClient)
 	artifactController := controllers.NewArtifactController(artifactService)
 
-	componentService := services.NewComponentService(componentClient, observClient, icpClient)
+	githubClient := ghclient.NewClient(cfg.GitHub.BaseURL, cfg.GitHub.Token)
+
+	componentService := services.NewComponentService(componentClient, observClient, icpClient, githubClient)
 	componentController := controllers.NewComponentController(componentService)
 
 	scheduleClient := openchoreo.NewScheduleClient(cfg.PlatformAPI.BaseURL, cfg.PlatformAPI.HostHeader)

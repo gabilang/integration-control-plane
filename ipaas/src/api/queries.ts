@@ -39,6 +39,19 @@ export interface BffProjectList {
   totalCount?: number;
 }
 
+export interface BffDeploymentTrack {
+  id: string;
+  branch?: string;
+  commitSha?: string;
+  url?: string;
+  appPath?: string;
+  componentId?: string;
+  latest?: boolean;
+  autoDeployEnabled?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface BffComponent {
   uid?: string;
   name: string;
@@ -48,6 +61,7 @@ export interface BffComponent {
   type?: string;
   createdAt?: string;
   status?: string;
+  deploymentTracks?: BffDeploymentTrack[];
 }
 
 export interface BffComponentList {
@@ -311,7 +325,11 @@ export function useComponentByHandler(projectName: string, handler: string | und
       icpClient.get<BffComponentList>('/components', { projectName }).then((d) => {
         const c = d.items.find((x) => x.name === handler);
         if (!c) throw new Error(`Component '${handler}' not found in project '${projectName}'`);
-        return { ...mapComponent(c), orgHandler: '' } as GqlComponentDetail;
+        return {
+          ...mapComponent(c),
+          orgHandler: '',
+          deploymentTracks: (c.deploymentTracks ?? []).map((t) => ({ id: t.id })),
+        } as GqlComponentDetail;
       }),
     enabled: !!projectName && !!handler,
   });
@@ -747,6 +765,76 @@ export function useDeploymentStatus(componentId: string, versionId: string) {
         .get<GqlDeploymentStatus[]>(`/components/${encodeURIComponent(componentId)}/deployments/status`, { versionId })
         .catch(() => []),
     enabled: !!componentId && !!versionId,
+    retry: false,
+    refetchInterval: 15000,
+  });
+}
+
+// ── Builds (OpenChoreo workflow runs) ──
+
+export interface BffWorkflowRun {
+  name: string;
+  status: string;
+  startedAt: string;
+  completedAt: string;
+  componentName: string;
+  projectName: string;
+  image: string;
+  commit: string;
+}
+
+interface BffWorkflowRunList {
+  items: BffWorkflowRun[];
+}
+
+/** Maps OpenChoreo workflow run status to the status/conclusion pair used by BuildCard. */
+function mapWorkflowRunToBuildInfo(run: BffWorkflowRun): GqlDeploymentStatus {
+  let status = 'queued';
+  let conclusion = '';
+
+  switch (run.status) {
+    case 'Running':
+      status = 'in_progress';
+      break;
+    case 'Succeeded':
+      status = 'completed';
+      conclusion = 'success';
+      break;
+    case 'Failed':
+      status = 'completed';
+      conclusion = 'failure';
+      break;
+    case 'Pending':
+    default:
+      status = 'queued';
+      break;
+  }
+
+  return {
+    id: 0,
+    sha: run.commit,
+    started_at: run.startedAt,
+    completed_at: run.completedAt,
+    status,
+    conclusion,
+    conclusionV2: conclusion,
+    isAutoDeploy: false,
+    name: run.name,
+    failureReason: 0,
+    sourceCommitId: run.commit,
+    buildRef: run.name,
+  };
+}
+
+export function useBuilds(componentName: string, projectName: string) {
+  return useQuery({
+    queryKey: ['builds', componentName, projectName],
+    queryFn: () =>
+      icpClient
+        .get<BffWorkflowRunList>(`/components/${encodeURIComponent(componentName)}/builds`, { projectName })
+        .then((d) => (d.items ?? []).map(mapWorkflowRunToBuildInfo))
+        .catch(() => []),
+    enabled: !!componentName && !!projectName,
     retry: false,
     refetchInterval: 15000,
   });

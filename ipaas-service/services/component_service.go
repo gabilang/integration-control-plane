@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 
+	ghclient "github.com/wso2/integration-control-plane/ipaas-service/clients/github"
 	"github.com/wso2/integration-control-plane/ipaas-service/clients/icp"
 	"github.com/wso2/integration-control-plane/ipaas-service/clients/observability"
 	"github.com/wso2/integration-control-plane/ipaas-service/clients/openchoreo"
@@ -44,10 +45,11 @@ type componentService struct {
 	client       openchoreo.ComponentClient
 	observClient observability.Client
 	icpClient    *icp.Client
+	ghClient     *ghclient.Client
 }
 
-func NewComponentService(client openchoreo.ComponentClient, observClient observability.Client, icpClient *icp.Client) ComponentService {
-	return &componentService{client: client, observClient: observClient, icpClient: icpClient}
+func NewComponentService(client openchoreo.ComponentClient, observClient observability.Client, icpClient *icp.Client, ghClient *ghclient.Client) ComponentService {
+	return &componentService{client: client, observClient: observClient, icpClient: icpClient, ghClient: ghClient}
 }
 
 func (s *componentService) ListComponents(ctx context.Context, orgName, projectName string, limit int, cursor string) (*models.ComponentList, error) {
@@ -328,6 +330,38 @@ func (s *componentService) GetCommitHistory(ctx context.Context, orgName, projec
 			},
 		})
 	}
+
+	// If no commits found from workflow runs, fall back to the component's
+	// deployment track which stores the configured revision commit SHA.
+	if len(items) == 0 {
+		track, trackErr := s.client.GetDeploymentTrack(ctx, componentName)
+		if trackErr == nil && track.CommitSHA != "" {
+			items = append(items, models.Commit{
+				SHA:      track.CommitSHA,
+				IsLatest: true,
+			})
+		}
+
+		// Final fallback: fetch commit history from GitHub API using the
+		// repository URL and branch from the deployment track.
+		if len(items) == 0 && s.ghClient != nil && s.ghClient.IsAvailable() &&
+			trackErr == nil && track.URL != "" {
+			ghBranch := branch
+			if ghBranch == "" {
+				ghBranch = track.Branch
+			}
+			if ghBranch != "" {
+				ghCommits, ghErr := s.ghClient.GetCommits(ctx, track.URL, ghBranch, 20)
+				if ghErr != nil {
+					slog.WarnContext(ctx, "github commit history fallback failed",
+						"component", componentName, "repo", track.URL, "error", ghErr)
+				} else {
+					items = ghCommits
+				}
+			}
+		}
+	}
+
 	return &models.CommitList{Items: items}, nil
 }
 

@@ -37,6 +37,10 @@ func Load() (Config, error) {
 			GraphQLURL:  r.readOptionalString("ICP_GRAPHQL_URL", ""),
 			AuthBaseURL: r.readOptionalString("ICP_AUTH_BASE_URL", ""),
 		},
+		GitHub: GitHubConfig{
+			BaseURL: r.readOptionalString("GITHUB_API_BASE_URL", "https://api.github.com"),
+			Token:   r.readOptionalString("GITHUB_TOKEN", ""),
+		},
 	}
 
 	if len(r.errors) > 0 {
