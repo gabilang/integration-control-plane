@@ -25,14 +25,23 @@ type ComponentList struct {
 
 // WorkflowRun represents a triggered component build/workflow run.
 type WorkflowRun struct {
-	Name          string `json:"name,omitempty"`
-	Status        string `json:"status,omitempty"`
-	StartedAt     string `json:"startedAt,omitempty"`
-	CompletedAt   string `json:"completedAt,omitempty"`
-	ComponentName string `json:"componentName,omitempty"`
-	ProjectName   string `json:"projectName,omitempty"`
-	Image         string `json:"image,omitempty"`
-	Commit        string `json:"commit,omitempty"`
+	Name          string         `json:"name,omitempty"`
+	Status        string         `json:"status,omitempty"`
+	StartedAt     string         `json:"startedAt,omitempty"`
+	CompletedAt   string         `json:"completedAt,omitempty"`
+	ComponentName string         `json:"componentName,omitempty"`
+	ProjectName   string         `json:"projectName,omitempty"`
+	Image         string         `json:"image,omitempty"`
+	Commit        string         `json:"commit,omitempty"`
+	Tasks         []WorkflowTask `json:"tasks,omitempty"`
+}
+
+// WorkflowTask represents a single step/task within a workflow run.
+type WorkflowTask struct {
+	Name        string `json:"name"`
+	Phase       string `json:"phase"`
+	StartedAt   string `json:"startedAt,omitempty"`
+	CompletedAt string `json:"completedAt,omitempty"`
 }
 
 // WorkflowRunList is the paginated list of workflow runs.

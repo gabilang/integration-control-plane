@@ -748,6 +748,7 @@ export interface GqlDeploymentStatus {
   failureReason: number;
   sourceCommitId: string;
   buildRef?: string;
+  tasks?: BffWorkflowTask[];
 }
 
 const DEPLOYMENT_STATUS_QUERY = `
@@ -772,6 +773,13 @@ export function useDeploymentStatus(componentId: string, versionId: string) {
 
 // ── Builds (OpenChoreo workflow runs) ──
 
+export interface BffWorkflowTask {
+  name: string;
+  phase: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
 export interface BffWorkflowRun {
   name: string;
   status: string;
@@ -781,6 +789,7 @@ export interface BffWorkflowRun {
   projectName: string;
   image: string;
   commit: string;
+  tasks?: BffWorkflowTask[];
 }
 
 interface BffWorkflowRunList {
@@ -823,6 +832,7 @@ function mapWorkflowRunToBuildInfo(run: BffWorkflowRun): GqlDeploymentStatus {
     failureReason: 0,
     sourceCommitId: run.commit,
     buildRef: run.name,
+    tasks: run.tasks,
   };
 }
 

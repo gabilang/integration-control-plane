@@ -3,7 +3,9 @@ package openchoreo
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/wso2/integration-control-plane/ipaas-service/clients/requests"
@@ -146,6 +148,15 @@ func buildDeploymentTrack(comp ocComponent) *models.DeploymentTrack {
 	return track
 }
 
+// normalizeWorkflowReason strips the "Workflow" prefix from OpenChoreo
+// condition reasons (e.g. "WorkflowSucceeded" → "Succeeded").
+func normalizeWorkflowReason(reason string) string {
+	if after, ok := strings.CutPrefix(reason, "Workflow"); ok && after != "" {
+		return after
+	}
+	return reason
+}
+
 // normalizeWorkflowRun converts a K8s-style OpenChoreo workflow run into the
 // flat model returned to callers.
 func normalizeWorkflowRun(run ocWorkflowRun) models.WorkflowRun {
@@ -156,24 +167,49 @@ func normalizeWorkflowRun(run ocWorkflowRun) models.WorkflowRun {
 		projectName = labels["openchoreo.dev/project"]
 	}
 
-	// Determine status from conditions:
-	// - WorkflowCompleted reason if present
-	// - "Running" if WorkflowRunning condition is True
-	// - else "Pending"
+	// Determine status from conditions.
+	// OpenChoreo uses "WorkflowCompleted" / "WorkflowRunning" condition types
+	// whose Reason values are prefixed: "WorkflowSucceeded", "WorkflowFailed",
+	// "WorkflowRunning", "WorkflowPending". We strip the prefix so the API
+	// returns bare "Succeeded" / "Failed" / "Running" / "Pending".
 	status := "Pending"
 	for _, c := range run.Status.Conditions {
-		if c.Type == "WorkflowCompleted" && c.Reason != "" {
-			status = c.Reason
-			break
-		}
-		if c.Type == "WorkflowRunning" && c.Status == "True" {
-			status = "Running"
+		slog.Debug("workflow run condition",
+			"run", run.Metadata.Name, "type", c.Type, "status", c.Status, "reason", c.Reason)
+		switch c.Type {
+		case "WorkflowCompleted":
+			if c.Status == "True" && c.Reason != "" {
+				status = normalizeWorkflowReason(c.Reason)
+			}
+		case "WorkflowRunning":
+			if c.Status == "True" {
+				status = "Running"
+			}
+		case "Succeeded":
+			switch c.Status {
+			case "True":
+				status = "Succeeded"
+			case "False":
+				status = "Failed"
+			case "Unknown":
+				if c.Reason == "Running" {
+					status = "Running"
+				}
+			}
 		}
 	}
 
-	// Extract image from publish-image task output and commit from checkout-source
+	// Extract image from publish-image task output and commit from checkout-source.
+	// Also build the flat task list with per-task phase information.
 	var image, commit string
+	tasks := make([]models.WorkflowTask, 0, len(run.Status.Tasks))
 	for _, task := range run.Status.Tasks {
+		tasks = append(tasks, models.WorkflowTask{
+			Name:        task.Name,
+			Phase:       task.Phase,
+			StartedAt:   task.StartedAt,
+			CompletedAt: task.CompletedAt,
+		})
 		if task.Outputs == nil {
 			continue
 		}
@@ -208,6 +244,7 @@ func normalizeWorkflowRun(run ocWorkflowRun) models.WorkflowRun {
 		ProjectName:   projectName,
 		Image:         image,
 		Commit:        commit,
+		Tasks:         tasks,
 	}
 }
 

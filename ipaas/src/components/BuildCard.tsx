@@ -21,7 +21,7 @@ import { ChevronDown, ChevronUp, GitCommit, List } from '@wso2/oxygen-ui-icons-r
 import { InProgressIcon, SuccessIcon, QueuedIcon, FailedIcon } from './StatusIcons';
 import React, { useEffect, useRef, useState } from 'react';
 import { fetchBuildRunLogs, type BuildRunLogs } from '../api/builds';
-import { useBuilds, type GqlCommit } from '../api/queries';
+import { useBuilds, type GqlCommit, type BffWorkflowTask } from '../api/queries';
 
 interface BuildCardProps {
   componentId: string;
@@ -31,12 +31,35 @@ interface BuildCardProps {
 }
 
 const STAGES = [
-  { key: 'init' as const, label: 'Initialization' },
-  { key: 'build' as const, label: 'Build Source & Test' },
-  { key: 'deploy' as const, label: 'Finalization' },
+  { key: 'init' as const, label: 'Initialization', taskName: 'checkout-source' },
+  { key: 'build' as const, label: 'Build Source & Test', taskName: 'build-image' },
+  { key: 'deploy' as const, label: 'Finalization', taskName: 'generate-workload-cr' },
 ];
 
-function getStepStatus(logs: BuildRunLogs | null, key: 'init' | 'build' | 'deploy'): 'success' | 'error' | 'active' | 'pending' {
+// Derive step status from workflow task phase when available, otherwise fall back to logs.
+function getStepStatusFromTask(task: BffWorkflowTask | undefined): 'success' | 'error' | 'active' | 'pending' {
+  if (!task) return 'pending';
+  switch (task.phase) {
+    case 'Succeeded':
+      return 'success';
+    case 'Failed':
+    case 'Error':
+      return 'error';
+    case 'Running':
+      return 'active';
+    default:
+      return 'pending';
+  }
+}
+
+function getStepStatus(logs: BuildRunLogs | null, key: 'init' | 'build' | 'deploy', tasks?: BffWorkflowTask[]): 'success' | 'error' | 'active' | 'pending' {
+  // Prefer workflow task phases from the API
+  if (tasks && tasks.length > 0) {
+    const stage = STAGES.find((s) => s.key === key);
+    const task = stage ? tasks.find((t) => t.name === stage.taskName) : undefined;
+    return getStepStatusFromTask(task);
+  }
+  // Fall back to logs-based detection
   const stage = logs?.[key];
   if (!stage) return 'pending';
   if (stage.status === 'in_progress') return 'active';
@@ -47,13 +70,13 @@ function getStepStatus(logs: BuildRunLogs | null, key: 'init' | 'build' | 'deplo
   return 'pending';
 }
 
-function activeStepIndex(logs: BuildRunLogs | null): number {
-  if (!logs) return 0;
-  const init = getStepStatus(logs, 'init');
-  const build = getStepStatus(logs, 'build');
+function activeStepIndex(logs: BuildRunLogs | null, tasks?: BffWorkflowTask[]): number {
+  if (!logs && (!tasks || tasks.length === 0)) return 0;
+  const init = getStepStatus(logs, 'init', tasks);
+  const build = getStepStatus(logs, 'build', tasks);
   if (init === 'active') return 0;
   if (build === 'active') return 1;
-  if (getStepStatus(logs, 'deploy') === 'active') return 2;
+  if (getStepStatus(logs, 'deploy', tasks) === 'active') return 2;
   if (init === 'success' && build === 'success') return 3;
   if (init === 'success') return 1;
   return 0;
@@ -274,9 +297,9 @@ export default function BuildCard({ componentId, orgHandler, projectId, latestCo
         <Divider sx={{ mb: 2 }} />
 
         {/* Horizontal stepper */}
-        <Stepper activeStep={activeStepIndex(logs)} alternativeLabel nonLinear sx={{ mb: showLogs ? 2 : 0 }}>
+        <Stepper activeStep={activeStepIndex(logs, lastBuild?.tasks)} alternativeLabel nonLinear sx={{ mb: showLogs ? 2 : 0 }}>
           {STAGES.map(({ key, label }) => {
-            const stepStatus = getStepStatus(logs, key);
+            const stepStatus = getStepStatus(logs, key, lastBuild?.tasks);
             let icon: React.ReactNode;
             if (stepStatus === 'active') icon = <InProgressIcon size={24} />;
             else if (stepStatus === 'success') icon = <SuccessIcon size={24} />;

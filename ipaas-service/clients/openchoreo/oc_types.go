@@ -138,8 +138,11 @@ type ocTaskOutputs struct {
 }
 
 type ocTask struct {
-	Name    string         `json:"name"`
-	Outputs *ocTaskOutputs `json:"outputs,omitempty"`
+	Name        string         `json:"name"`
+	Phase       string         `json:"phase,omitempty"`
+	StartedAt   string         `json:"startedAt,omitempty"`
+	CompletedAt string         `json:"completedAt,omitempty"`
+	Outputs     *ocTaskOutputs `json:"outputs,omitempty"`
 }
 
 type ocWorkflowRunStatus struct {
