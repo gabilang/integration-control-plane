@@ -351,7 +351,7 @@ func (s *componentService) GetCommitHistory(ctx context.Context, orgName, projec
 				ghBranch = track.Branch
 			}
 			if ghBranch != "" {
-				ghCommits, ghErr := s.ghClient.GetCommits(ctx, track.URL, ghBranch, 20)
+				ghCommits, ghErr := s.ghClient.GetCommits(ctx, track.URL, ghBranch, track.AppPath, 20)
 				if ghErr != nil {
 					slog.WarnContext(ctx, "github commit history fallback failed",
 						"component", componentName, "repo", track.URL, "error", ghErr)

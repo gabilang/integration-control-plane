@@ -82,8 +82,9 @@ func ParseRepoOwnerAndName(repoURL string) (owner, repo string, err error) {
 }
 
 // GetCommits fetches the most recent commits for a branch from the GitHub API.
-// GET /repos/{owner}/{repo}/commits?sha={branch}&per_page={limit}
-func (c *Client) GetCommits(ctx context.Context, repoURL, branch string, limit int) ([]models.Commit, error) {
+// When path is non-empty, only commits touching that path are returned.
+// GET /repos/{owner}/{repo}/commits?sha={branch}&per_page={limit}&path={path}
+func (c *Client) GetCommits(ctx context.Context, repoURL, branch, path string, limit int) ([]models.Commit, error) {
 	owner, repo, err := ParseRepoOwnerAndName(repoURL)
 	if err != nil {
 		return nil, err
@@ -100,6 +101,9 @@ func (c *Client) GetCommits(ctx context.Context, repoURL, branch string, limit i
 		url.QueryEscape(branch),
 		limit,
 	)
+	if path != "" {
+		apiURL += "&path=" + url.QueryEscape(path)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 	if err != nil {
