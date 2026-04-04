@@ -12,8 +12,8 @@ import (
 
 type DeploymentController interface {
 	GetComponentDeployment(w http.ResponseWriter, r *http.Request)
-	GetDeploymentStatus(w http.ResponseWriter, r *http.Request)
 	DeployDeploymentTrack(w http.ResponseWriter, r *http.Request)
+	Deploy(w http.ResponseWriter, r *http.Request)
 	Promote(w http.ResponseWriter, r *http.Request)
 	StopDeployment(w http.ResponseWriter, r *http.Request)
 }
@@ -26,7 +26,7 @@ func NewDeploymentController(service services.DeploymentService) DeploymentContr
 	return &deploymentController{service: service}
 }
 
-// GetComponentDeployment handles GET /components/{componentName}/deployments?orgHandler=...&orgUuid=...&versionId=...&environmentId=...
+// GetComponentDeployment handles GET /components/{componentName}/deployments?environmentId=...
 func (c *deploymentController) GetComponentDeployment(w http.ResponseWriter, r *http.Request) {
 	componentName := r.PathValue("componentName")
 	orgHandler := r.URL.Query().Get("orgHandler")
@@ -44,30 +44,18 @@ func (c *deploymentController) GetComponentDeployment(w http.ResponseWriter, r *
 	utils.WriteSuccessResponse(w, http.StatusOK, deployment)
 }
 
-// GetDeploymentStatus handles GET /components/{componentName}/deployments/status?versionId=...
-func (c *deploymentController) GetDeploymentStatus(w http.ResponseWriter, r *http.Request) {
-	componentName := r.PathValue("componentName")
-	versionID := r.URL.Query().Get("versionId")
-
-	statuses, err := c.service.GetDeploymentStatus(r.Context(), componentName, versionID)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "get deployment status failed", "error", err, "component", componentName)
-		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to get deployment status")
-		return
-	}
-
-	utils.WriteSuccessResponse(w, http.StatusOK, statuses)
-}
-
 // DeployDeploymentTrack handles POST /components/{componentName}/deployments
 func (c *deploymentController) DeployDeploymentTrack(w http.ResponseWriter, r *http.Request) {
+	componentName := r.PathValue("componentName")
+	projectName := r.URL.Query().Get("projectName")
+
 	var input models.DeployDeploymentTrackInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		utils.WriteErrorResponse(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	result, err := c.service.DeployDeploymentTrack(r.Context(), &input)
+	result, err := c.service.DeployDeploymentTrack(r.Context(), componentName, projectName, &input)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "deploy deployment track failed", "error", err)
 		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to deploy deployment track")
@@ -77,9 +65,31 @@ func (c *deploymentController) DeployDeploymentTrack(w http.ResponseWriter, r *h
 	utils.WriteSuccessResponse(w, http.StatusOK, result)
 }
 
+// Deploy handles POST /components/{componentName}/deploy?projectName=...&environment=...
+// Generates a release and creates/updates a ReleaseBinding for the given environment.
+func (c *deploymentController) Deploy(w http.ResponseWriter, r *http.Request) {
+	componentName := r.PathValue("componentName")
+	projectName := r.URL.Query().Get("projectName")
+	environment := r.URL.Query().Get("environment")
+
+	if environment == "" {
+		environment = "development"
+	}
+
+	deployment, err := c.service.DeployToEnvironment(r.Context(), "", projectName, componentName, environment)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "deploy to environment failed", "error", err, "component", componentName, "env", environment)
+		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to deploy")
+		return
+	}
+
+	utils.WriteSuccessResponse(w, http.StatusOK, deployment)
+}
+
 // Promote handles POST /components/{componentName}/deployments/promote
 func (c *deploymentController) Promote(w http.ResponseWriter, r *http.Request) {
 	componentName := r.PathValue("componentName")
+	projectName := r.URL.Query().Get("projectName")
 
 	var input models.PromoteInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -87,7 +97,7 @@ func (c *deploymentController) Promote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := c.service.Promote(r.Context(), componentName, &input)
+	result, err := c.service.Promote(r.Context(), componentName, projectName, &input)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "promote failed", "error", err, "component", componentName)
 		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to promote")
@@ -99,13 +109,15 @@ func (c *deploymentController) Promote(w http.ResponseWriter, r *http.Request) {
 
 // StopDeployment handles DELETE /components/{componentName}/deployments
 func (c *deploymentController) StopDeployment(w http.ResponseWriter, r *http.Request) {
+	componentName := r.PathValue("componentName")
+
 	var input models.StopDeploymentInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		utils.WriteErrorResponse(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	result, err := c.service.StopDeployment(r.Context(), &input)
+	result, err := c.service.StopDeployment(r.Context(), componentName, &input)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "stop deployment failed", "error", err)
 		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to stop deployment")

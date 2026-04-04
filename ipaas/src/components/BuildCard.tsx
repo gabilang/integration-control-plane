@@ -20,8 +20,10 @@ import { Box, Button, CircularProgress, Collapse, Divider, IconButton, Stack, St
 import { ChevronDown, ChevronUp, GitCommit, List } from '@wso2/oxygen-ui-icons-react';
 import { InProgressIcon, SuccessIcon, QueuedIcon, FailedIcon } from './StatusIcons';
 import React, { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { fetchBuildRunLogs, type BuildRunLogs } from '../api/builds';
 import { useBuilds, type GqlCommit, type BffWorkflowTask } from '../api/queries';
+import { useDeployComponent } from '../api/mutations';
 
 interface BuildCardProps {
   componentId: string;
@@ -134,6 +136,9 @@ function buildLogText(logs: BuildRunLogs | null): string | null {
 export default function BuildCard({ componentId, orgHandler, projectId, latestCommit }: BuildCardProps) {
   const { data: deployments = [] } = useBuilds(componentId, projectId);
   const lastBuild = deployments[0] ?? null;
+  const queryClient = useQueryClient();
+  const deployComponent = useDeployComponent();
+  const deployedBuildRef = useRef<string | null>(null);
 
   const [expanded, setExpanded] = useState(true);
   const [showLogs, setShowLogs] = useState(false);
@@ -148,6 +153,23 @@ export default function BuildCard({ componentId, orgHandler, projectId, latestCo
       mountedRef.current = false;
     };
   }, []);
+
+  // Auto-deploy to development environment when a build succeeds
+  useEffect(() => {
+    if (!lastBuild || !lastBuild.name) return;
+    const isCompleted = lastBuild.status === 'completed' && lastBuild.conclusion === 'success';
+    if (isCompleted && deployedBuildRef.current !== lastBuild.name) {
+      deployedBuildRef.current = lastBuild.name;
+      deployComponent.mutate(
+        { componentId, projectName: projectId, environment: 'development' },
+        {
+          onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['componentDeployment'] });
+          },
+        },
+      );
+    }
+  }, [lastBuild, componentId, projectId, deployComponent, queryClient]);
 
   // Reset log view when build changes
   useEffect(() => {

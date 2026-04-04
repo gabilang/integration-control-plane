@@ -173,6 +173,7 @@ export default function Environment({ env, componentId, projectId, componentType
                   envName: env.name,
                   componentId,
                   orgHandler,
+                  projectId,
                   releaseId: envReleaseId,
                   versionId,
                   deploymentPipelineId,

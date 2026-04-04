@@ -33,11 +33,12 @@ interface ScheduleDialogProps {
   envName: string;
   componentId: string;
   orgHandler: string;
+  projectId: string;
   versionId: string;
   deploymentPipelineId: string;
 }
 
-export default function ScheduleDialog({ open, onClose, onSaveSuccess, onSaveError, envId, envName: _envName, componentId, orgHandler, versionId, deploymentPipelineId }: ScheduleDialogProps) {
+export default function ScheduleDialog({ open, onClose, onSaveSuccess, onSaveError, envId, envName: _envName, componentId, orgHandler, projectId, versionId, deploymentPipelineId }: ScheduleDialogProps) {
   const handleClose = () => {
     (document.activeElement as HTMLElement)?.blur();
     onClose();
@@ -96,6 +97,7 @@ export default function ScheduleDialog({ open, onClose, onSaveSuccess, onSaveErr
     deployTrack.mutate(
       {
         componentId,
+        projectName: projectId,
         id: versionId,
         imageId: deployment?.build?.buildId ?? '',
         environmentId: envId,

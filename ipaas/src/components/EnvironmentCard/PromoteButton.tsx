@@ -27,13 +27,14 @@ import { Permissions } from '../../constants/permissions';
 interface PromoteButtonProps {
   orgHandler: string;
   componentId: string;
+  projectId: string;
   versionId: string;
   deploymentPipelineId: string;
   sourceEnvId: string;
   targetEnvId: string;
 }
 
-export default function PromoteButton({ orgHandler, componentId, versionId, deploymentPipelineId, sourceEnvId, targetEnvId }: PromoteButtonProps) {
+export default function PromoteButton({ orgHandler, componentId, projectId, versionId, deploymentPipelineId, sourceEnvId, targetEnvId }: PromoteButtonProps) {
   const orgUuid = getOrgUuidFromToken() ?? '';
   const { data: sourceDeployment, isLoading: sourceLoading } = useComponentDeployment(orgHandler, orgUuid, componentId, versionId, sourceEnvId);
   const { data: targetDeployment, isLoading: targetLoading } = useComponentDeployment(orgHandler, orgUuid, componentId, versionId, targetEnvId);
@@ -48,6 +49,7 @@ export default function PromoteButton({ orgHandler, componentId, versionId, depl
     if (!buildId || !sourceReleaseId || alreadyPromoted) return;
     promote.mutate({
       componentId,
+      projectName: projectId,
       apiVersionId: versionId,
       sourceReleaseId,
       targetEnvironmentId: targetEnvId,

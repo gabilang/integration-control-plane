@@ -49,4 +49,5 @@ type StopDeploymentInput struct {
 	OrgHandler  string `json:"orgHandler"`
 	ComponentID string `json:"componentId"`
 	ReleaseID   string `json:"releaseId"`
+	Environment string `json:"environment"`
 }

@@ -102,6 +102,7 @@ export default function Component(scope: ComponentScope): JSX.Element {
                   <PromoteButton
                     orgHandler={scope.org}
                     componentId={component.id}
+                    projectId={projectId}
                     versionId={component.deploymentTracks?.[0]?.id ?? ''}
                     deploymentPipelineId={project?.defaultDeploymentPipelineId ?? ''}
                     sourceEnvId={env.id}

@@ -299,6 +299,7 @@ export function useTriggerTask() {
 
 export interface DeployDeploymentTrackInput {
   componentId: string;
+  projectName?: string;
   id: string;
   imageId: string;
   environmentId: string;
@@ -313,7 +314,11 @@ export function useDeployDeploymentTrack() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: DeployDeploymentTrackInput) =>
-      icpClient.post<string>(`/components/${encodeURIComponent(input.componentId)}/deployments`, input),
+      icpClient.post<string>(
+        `/components/${encodeURIComponent(input.componentId)}/deployments`,
+        input,
+        { projectName: input.projectName },
+      ),
     onSuccess: (_data, input) => {
       qc.invalidateQueries({ queryKey: ['deploymentStatus', input.componentId, input.id] });
       qc.invalidateQueries({ queryKey: ['executionConfigs', input.componentId] });
@@ -377,10 +382,35 @@ export function useTriggerBuild() {
   });
 }
 
+// ── Deploy to environment (auto-deploy after build success) ──
+
+export interface DeployComponentInput {
+  componentId: string;
+  projectName: string;
+  environment?: string;
+}
+
+export function useDeployComponent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: DeployComponentInput) =>
+      icpClient.post<{ releaseId: string; cron: string; cronTimezone: string }>(
+        `/components/${encodeURIComponent(input.componentId)}/deploy`,
+        {},
+        { projectName: input.projectName, environment: input.environment ?? 'development' },
+      ),
+    onSuccess: (_data, input) => {
+      qc.invalidateQueries({ queryKey: ['componentDeployment'] });
+      qc.invalidateQueries({ queryKey: ['executionConfigs', input.componentId] });
+    },
+  });
+}
+
 // ── Promote ──
 
 export interface PromoteInput {
   componentId: string;
+  projectName: string;
   apiVersionId: string;
   sourceReleaseId: string;
   targetEnvironmentId: string;
@@ -391,12 +421,16 @@ export function usePromote() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: PromoteInput) =>
-      icpClient.post<string>(`/components/${encodeURIComponent(input.componentId)}/deployments/promote`, {
-        apiVersionId: input.apiVersionId,
-        sourceReleaseId: input.sourceReleaseId,
-        targetEnvironmentId: input.targetEnvironmentId,
-        deploymentPipelineId: input.deploymentPipelineId,
-      }),
+      icpClient.post<string>(
+        `/components/${encodeURIComponent(input.componentId)}/deployments/promote`,
+        {
+          apiVersionId: input.apiVersionId,
+          sourceReleaseId: input.sourceReleaseId,
+          targetEnvironmentId: input.targetEnvironmentId,
+          deploymentPipelineId: input.deploymentPipelineId,
+        },
+        { projectName: input.projectName },
+      ),
     onSuccess: (_data, input) => {
       qc.invalidateQueries({ queryKey: ['componentDeployment'] });
       qc.invalidateQueries({ queryKey: ['deploymentStatus', input.componentId] });
@@ -410,6 +444,7 @@ export interface StopDeploymentInput {
   orgHandler: string;
   componentId: string;
   releaseId: string;
+  environment: string;
 }
 
 export function useStopDeployment() {
@@ -418,7 +453,7 @@ export function useStopDeployment() {
     mutationFn: (input: StopDeploymentInput) =>
       icpClient.delete<string>(
         `/components/${encodeURIComponent(input.componentId)}/deployments`,
-        { orgHandler: input.orgHandler, componentId: input.componentId, releaseId: input.releaseId },
+        { orgHandler: input.orgHandler, componentId: input.componentId, releaseId: input.releaseId, environment: input.environment },
       ),
     onSuccess: (_data, input) => {
       qc.invalidateQueries({ queryKey: ['executionConfigs', input.componentId] });

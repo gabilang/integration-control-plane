@@ -73,7 +73,7 @@ func main() {
 	runtimeService := services.NewRuntimeService(icpClient)
 	runtimeController := controllers.NewRuntimeController(runtimeService)
 
-	deploymentService := services.NewDeploymentService(icpClient)
+	deploymentService := services.NewDeploymentService(scheduleClient)
 	deploymentController := controllers.NewDeploymentController(deploymentService)
 
 	loggerService := services.NewLoggerService(icpClient)

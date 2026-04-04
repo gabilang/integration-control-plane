@@ -727,7 +727,7 @@ export function useComponentDeployment(orgHandler: string, orgUuid: string, comp
       icpClient
         .get<GqlComponentDeployment>(`/components/${encodeURIComponent(componentId)}/deployments`, { orgHandler, orgUuid, versionId, environmentId })
         .catch(() => null),
-    enabled: !!orgHandler && !!orgUuid && !!componentId && !!versionId && !!environmentId,
+    enabled: !!orgHandler && !!componentId && !!environmentId,
     retry: false,
   });
 }

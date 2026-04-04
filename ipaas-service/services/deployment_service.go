@@ -2,146 +2,145 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"log/slog"
+	"strings"
 
-	"github.com/wso2/integration-control-plane/ipaas-service/clients/icp"
+	"github.com/wso2/integration-control-plane/ipaas-service/clients/openchoreo"
 	"github.com/wso2/integration-control-plane/ipaas-service/models"
 )
 
-const (
-	getComponentDeploymentQuery   = `query GetComponentDeployment($orgHandler: String!, $orgUuid: String!, $componentId: String!, $versionId: String!, $environmentId: String!) { componentDeployment(orgHandler: $orgHandler, orgUuid: $orgUuid, componentId: $componentId, versionId: $versionId, environmentId: $environmentId) { releaseId, cron, cronTimezone, build { buildId } } }`
-	getDeploymentStatusQuery      = `query GetDeploymentStatus($versionId: String!, $componentId: String!) { deploymentStatusByVersion(versionId: $versionId, componentId: $componentId) { id, sha, started_at, completed_at, status, conclusion, conclusionV2, isAutoDeploy, name, failureReason, sourceCommitId, buildRef } }`
-	deployDeploymentTrackMutation = `mutation deployDeploymentTrack($input: DeployDeploymentTrackInput!) { deployDeploymentTrack(input: $input) }`
-	promoteMutation               = `mutation promote($componentId: String!, $promoteSchema: Promote!) { promote(componentId: $componentId, promoteSchema: $promoteSchema) }`
-	stopDeploymentMutation        = `mutation StopDeployment($orgHandler: String!, $componentId: String!, $releaseId: String!, $type: String!, $clearCron: Boolean!) { stopDeployment(orgHandler: $orgHandler, componentId: $componentId, releaseId: $releaseId, type: $type, clearCron: $clearCron) }`
-)
-
 type DeploymentService interface {
-	GetComponentDeployment(ctx context.Context, orgHandler, orgUUID, componentID, versionID, environmentID string) (*models.ComponentDeployment, error)
-	GetDeploymentStatus(ctx context.Context, componentID, versionID string) ([]models.DeploymentStatus, error)
-	DeployDeploymentTrack(ctx context.Context, input *models.DeployDeploymentTrackInput) (string, error)
-	Promote(ctx context.Context, componentID string, input *models.PromoteInput) (string, error)
-	StopDeployment(ctx context.Context, input *models.StopDeploymentInput) (string, error)
+	GetComponentDeployment(ctx context.Context, orgHandler, orgUUID, componentName, versionID, environment string) (*models.ComponentDeployment, error)
+	DeployDeploymentTrack(ctx context.Context, componentName, projectName string, input *models.DeployDeploymentTrackInput) (string, error)
+	DeployToEnvironment(ctx context.Context, orgName, projectName, componentName, environment string) (*models.ComponentDeployment, error)
+	Promote(ctx context.Context, componentName, projectName string, input *models.PromoteInput) (string, error)
+	StopDeployment(ctx context.Context, componentName string, input *models.StopDeploymentInput) (string, error)
 }
 
 type deploymentService struct {
-	icpClient *icp.Client
+	scheduleClient openchoreo.ScheduleClient
 }
 
-func NewDeploymentService(icpClient *icp.Client) DeploymentService {
-	return &deploymentService{icpClient: icpClient}
+func NewDeploymentService(scheduleClient openchoreo.ScheduleClient) DeploymentService {
+	return &deploymentService{scheduleClient: scheduleClient}
 }
 
-func (s *deploymentService) GetComponentDeployment(ctx context.Context, orgHandler, orgUUID, componentID, versionID, environmentID string) (*models.ComponentDeployment, error) {
-	data, err := s.icpClient.Query(ctx, getComponentDeploymentQuery, map[string]string{
-		"orgHandler":    orgHandler,
-		"orgUuid":       orgUUID,
-		"componentId":   componentID,
-		"versionId":     versionID,
-		"environmentId": environmentID,
-	})
+// GetComponentDeployment looks up the ReleaseBinding for the component in the
+// given environment. Returns nil (no error) when no release binding exists yet.
+func (s *deploymentService) GetComponentDeployment(ctx context.Context, _, _, componentName, _, environment string) (*models.ComponentDeployment, error) {
+	schedule, err := s.scheduleClient.GetReleaseBinding(ctx, "", componentName, environment)
 	if err != nil {
+		// A "not found" error means no deployment exists yet — return nil.
+		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("get component deployment: %w", err)
 	}
 
-	raw, ok := data["componentDeployment"]
-	if !ok {
-		return nil, fmt.Errorf("get component deployment: missing field")
-	}
-
-	var result models.ComponentDeployment
-	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("get component deployment: parse: %w", err)
-	}
-	return &result, nil
+	return &models.ComponentDeployment{
+		ReleaseID:    schedule.ReleaseName,
+		Cron:         schedule.CronExpression,
+		CronTimezone: "UTC",
+	}, nil
 }
 
-func (s *deploymentService) GetDeploymentStatus(ctx context.Context, componentID, versionID string) ([]models.DeploymentStatus, error) {
-	data, err := s.icpClient.Query(ctx, getDeploymentStatusQuery, map[string]string{
-		"componentId": componentID,
-		"versionId":   versionID,
-	})
+// DeployDeploymentTrack creates or updates a ReleaseBinding for the component
+// in the specified environment. A ComponentRelease is auto-generated if needed.
+func (s *deploymentService) DeployDeploymentTrack(ctx context.Context, componentName, projectName string, input *models.DeployDeploymentTrackInput) (string, error) {
+	req := &models.UpsertScheduleRequest{
+		Environment:    input.EnvironmentID,
+		CronExpression: derefString(input.Cron),
+		State:          "Active",
+	}
+
+	// Try update first; if not found, create.
+	schedule, err := s.scheduleClient.UpdateReleaseBinding(ctx, "", projectName, componentName, req)
 	if err != nil {
-		return nil, fmt.Errorf("get deployment status: %w", err)
+		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
+			schedule, err = s.scheduleClient.CreateReleaseBinding(ctx, "", projectName, componentName, req)
+			if err != nil {
+				return "", fmt.Errorf("create release binding: %w", err)
+			}
+		} else {
+			return "", fmt.Errorf("update release binding: %w", err)
+		}
 	}
 
-	raw, ok := data["deploymentStatusByVersion"]
-	if !ok {
-		return []models.DeploymentStatus{}, nil
-	}
-
-	var items []models.DeploymentStatus
-	if err := json.Unmarshal(raw, &items); err != nil {
-		return nil, fmt.Errorf("get deployment status: parse: %w", err)
-	}
-	if items == nil {
-		items = []models.DeploymentStatus{}
-	}
-	return items, nil
+	return schedule.ReleaseName, nil
 }
 
-func (s *deploymentService) DeployDeploymentTrack(ctx context.Context, input *models.DeployDeploymentTrackInput) (string, error) {
-	data, err := s.icpClient.Query(ctx, deployDeploymentTrackMutation, map[string]interface{}{
-		"input": input,
-	})
+// DeployToEnvironment generates a release from the latest workload and creates
+// or updates a ReleaseBinding for the given environment. Used for auto-deploy
+// after a successful build.
+func (s *deploymentService) DeployToEnvironment(ctx context.Context, _, projectName, componentName, environment string) (*models.ComponentDeployment, error) {
+	releaseName, err := s.scheduleClient.GenerateRelease(ctx, "", componentName)
 	if err != nil {
-		return "", fmt.Errorf("deploy deployment track: %w", err)
+		return nil, fmt.Errorf("generate release: %w", err)
+	}
+	slog.InfoContext(ctx, "generated release", "component", componentName, "release", releaseName)
+
+	req := &models.UpsertScheduleRequest{
+		Environment: environment,
+		State:       "Active",
+		ReleaseName: releaseName,
 	}
 
-	raw, ok := data["deployDeploymentTrack"]
-	if !ok {
-		return "", nil
+	// Try update first; create if not found.
+	schedule, err := s.scheduleClient.UpdateReleaseBinding(ctx, "", projectName, componentName, req)
+	if err != nil {
+		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
+			schedule, err = s.scheduleClient.CreateReleaseBinding(ctx, "", projectName, componentName, req)
+			if err != nil {
+				return nil, fmt.Errorf("create release binding: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("update release binding: %w", err)
+		}
 	}
 
-	var result string
-	if err := json.Unmarshal(raw, &result); err != nil {
-		return string(raw), nil
-	}
-	return result, nil
+	return &models.ComponentDeployment{
+		ReleaseID:    schedule.ReleaseName,
+		Cron:         schedule.CronExpression,
+		CronTimezone: "UTC",
+	}, nil
 }
 
-func (s *deploymentService) Promote(ctx context.Context, componentID string, input *models.PromoteInput) (string, error) {
-	data, err := s.icpClient.Query(ctx, promoteMutation, map[string]interface{}{
-		"componentId":   componentID,
-		"promoteSchema": input,
-	})
+// Promote creates a ReleaseBinding in the target environment using the release
+// from the source environment.
+func (s *deploymentService) Promote(ctx context.Context, componentName, projectName string, input *models.PromoteInput) (string, error) {
+	req := &models.UpsertScheduleRequest{
+		Environment: input.TargetEnvironmentID,
+		State:       "Active",
+		ReleaseName: input.SourceReleaseID,
+	}
+
+	schedule, err := s.scheduleClient.CreateReleaseBinding(ctx, "", projectName, componentName, req)
 	if err != nil {
-		return "", fmt.Errorf("promote: %w", err)
+		if strings.Contains(err.Error(), "409") || strings.Contains(err.Error(), "already exists") {
+			schedule, err = s.scheduleClient.UpdateReleaseBinding(ctx, "", projectName, componentName, req)
+			if err != nil {
+				return "", fmt.Errorf("update release binding for promote: %w", err)
+			}
+		} else {
+			return "", fmt.Errorf("create release binding for promote: %w", err)
+		}
 	}
 
-	raw, ok := data["promote"]
-	if !ok {
-		return "", nil
-	}
-
-	var result string
-	if err := json.Unmarshal(raw, &result); err != nil {
-		return string(raw), nil
-	}
-	return result, nil
+	return schedule.ReleaseName, nil
 }
 
-func (s *deploymentService) StopDeployment(ctx context.Context, input *models.StopDeploymentInput) (string, error) {
-	data, err := s.icpClient.Query(ctx, stopDeploymentMutation, map[string]interface{}{
-		"orgHandler":  input.OrgHandler,
-		"componentId": input.ComponentID,
-		"releaseId":   input.ReleaseID,
-		"type":        "scheduledTask",
-		"clearCron":   true,
-	})
-	if err != nil {
+// StopDeployment deletes the ReleaseBinding for the component in the given environment.
+func (s *deploymentService) StopDeployment(ctx context.Context, componentName string, input *models.StopDeploymentInput) (string, error) {
+	if err := s.scheduleClient.DeleteReleaseBinding(ctx, "", componentName, input.Environment); err != nil {
 		return "", fmt.Errorf("stop deployment: %w", err)
 	}
+	return "stopped", nil
+}
 
-	raw, ok := data["stopDeployment"]
-	if !ok {
-		return "", nil
+func derefString(s *string) string {
+	if s == nil {
+		return ""
 	}
-
-	var result string
-	if err := json.Unmarshal(raw, &result); err != nil {
-		return string(raw), nil
-	}
-	return result, nil
+	return *s
 }

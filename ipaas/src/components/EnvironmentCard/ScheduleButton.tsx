@@ -29,6 +29,7 @@ export interface ScheduleButtonProps {
   envName: string;
   componentId: string;
   orgHandler: string;
+  projectId: string;
   releaseId: string;
   versionId: string;
   deploymentPipelineId: string;
@@ -47,7 +48,7 @@ export default function ScheduleButton({ hasSchedule, disabled, onSaveSuccess, o
 
   const handleStopSchedule = () => {
     setSplitOpen(false);
-    stopDeployment.mutate({ orgHandler: dialogProps.orgHandler, componentId: dialogProps.componentId, releaseId: dialogProps.releaseId }, { onSuccess: () => onStopSuccess?.() });
+    stopDeployment.mutate({ orgHandler: dialogProps.orgHandler, componentId: dialogProps.componentId, releaseId: dialogProps.releaseId, environment: dialogProps.envId }, { onSuccess: () => onStopSuccess?.() });
   };
 
   return (
