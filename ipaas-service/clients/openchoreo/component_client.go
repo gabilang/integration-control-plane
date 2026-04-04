@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -391,6 +392,10 @@ func (c *componentClient) ListWorkflowRuns(ctx context.Context, _, projectName, 
 	for i, run := range raw.Items {
 		items[i] = normalizeWorkflowRun(run)
 	}
+	// Sort newest-first so the latest build is items[0].
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].StartedAt > items[j].StartedAt
+	})
 	return &models.WorkflowRunList{Items: items}, nil
 }
 

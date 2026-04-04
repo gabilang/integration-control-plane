@@ -153,7 +153,7 @@ export default function BuildCard({ componentId, orgHandler, projectId, latestCo
   useEffect(() => {
     setShowLogs(false);
     setLogs(null);
-  }, [lastBuild?.id]);
+  }, [lastBuild?.name]);
 
   const runId = lastBuild?.buildRef ?? String(lastBuild?.id ?? '');
   const isInProgress = lastBuild?.status === 'in_progress';
