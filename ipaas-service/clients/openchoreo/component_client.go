@@ -92,25 +92,36 @@ func normalizeComponent(comp ocComponent) models.Component {
 		projectName = labels["openchoreo.dev/project-name"]
 	}
 
-	var componentType string
-	if comp.Spec.ComponentType != nil {
-		componentType = comp.Spec.ComponentType.Name
-	}
-	if componentType == "" && labels != nil {
-		componentType = labels["openchoreo.dev/component-type"]
+	// BuildpackType is derived from the ClusterWorkflow name
+	// (e.g. "ballerina-buildpack-builder" → "BI", "mi-buildpack-builder" → "MI").
+	buildpackType := buildpackFromWorkflow(comp.Spec.Workflow)
+
+	// Backward compat: old components stored buildpack type directly in
+	// spec.componentType.name (e.g. "MI" or "BI") without a workflow.
+	if buildpackType == "" && comp.Spec.ComponentType != nil {
+		upper := strings.ToUpper(comp.Spec.ComponentType.Name)
+		if upper == "MI" || upper == "BI" {
+			buildpackType = upper
+		}
 	}
 
+	// ComponentType is derived from the ClusterComponentType name
+	// (e.g. "deployment/scheduled-task" → "automation").
+	componentType := componentTypeFromSpec(comp.Spec.ComponentType)
+
 	c := models.Component{
-		UID:         comp.Metadata.UID,
-		Name:        comp.Metadata.Name,
-		ProjectName: projectName,
-		DisplayName: displayName,
-		Description: description,
-		Type:        componentType,
-		AutoDeploy:  comp.Spec.AutoDeploy,
-		AutoBuild:   comp.Spec.AutoBuild,
-		CreatedAt:   comp.Metadata.CreationTimestamp,
-		Status:      latestConditionReason(comp.Status.Conditions),
+		UID:           comp.Metadata.UID,
+		Name:          comp.Metadata.Name,
+		ProjectName:   projectName,
+		DisplayName:   displayName,
+		Description:   description,
+		BuildpackType: buildpackType,
+		ComponentType: componentType,
+		DisplayType:   buildDisplayType(buildpackType, componentType),
+		AutoDeploy:    comp.Spec.AutoDeploy,
+		AutoBuild:     comp.Spec.AutoBuild,
+		CreatedAt:     comp.Metadata.CreationTimestamp,
+		Status:        latestConditionReason(comp.Status.Conditions),
 	}
 
 	// Synthesize a single deployment track from the component's workflow spec.
@@ -147,6 +158,49 @@ func buildDeploymentTrack(comp ocComponent) *models.DeploymentTrack {
 	}
 
 	return track
+}
+
+// buildDisplayType produces a composite display type from the buildpack and
+// component type: e.g. ("MI", "automation") → "miAutomation".
+func buildDisplayType(buildpackType, componentType string) string {
+	if buildpackType == "" || componentType == "" {
+		return componentType
+	}
+	return strings.ToLower(buildpackType) + strings.ToUpper(componentType[:1]) + componentType[1:]
+}
+
+// componentTypeFromSpec maps an OpenChoreo ClusterComponentType name to the
+// logical component type used by the frontend.
+// e.g. "deployment/scheduled-task" → "automation".
+func componentTypeFromSpec(ref *ocComponentTypeRef) string {
+	if ref == nil || ref.Name == "" {
+		return "automation"
+	}
+	specComponentTypes := map[string]string{
+		"deployment/scheduled-task":    "automation",
+		"deployment/service":           "service",
+		"deployment/ai-agent":          "aiAgent",
+		"deployment/event-integration": "eventIntegration",
+		"deployment/file-integration":  "fileIntegration",
+		"deployment/proxy":             "proxy",
+	}
+	if ct, ok := specComponentTypes[ref.Name]; ok {
+		return ct
+	}
+	return "automation"
+}
+
+// buildpackFromWorkflow derives the buildpack type ("MI" or "BI") from the
+// ClusterWorkflow name.
+// e.g. "ballerina-buildpack-builder" → "BI", "mi-buildpack-builder" → "MI".
+func buildpackFromWorkflow(wf *ocWorkflow) string {
+	if wf == nil || wf.Name == "" {
+		return ""
+	}
+	if strings.Contains(wf.Name, "ballerina") {
+		return "BI"
+	}
+	return "MI"
 }
 
 // normalizeWorkflowReason strips the "Workflow" prefix from OpenChoreo

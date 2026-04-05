@@ -58,7 +58,9 @@ export interface BffComponent {
   projectName?: string;
   displayName?: string;
   description?: string;
-  type?: string;
+  buildpackType?: string;
+  componentType?: string;
+  displayType?: string;
   createdAt?: string;
   status?: string;
   deploymentTracks?: BffDeploymentTrack[];
@@ -91,10 +93,11 @@ export interface GqlComponent {
   name: string;
   handler: string;
   displayName: string;
+  buildpackType?: string;
+  componentType?: string;
   displayType: string;
   description: string;
   status: string;
-  componentType?: string;
   componentSubType: string | null;
   version: string;
   createdAt: string;
@@ -128,10 +131,11 @@ export function mapComponent(c: BffComponent): GqlComponent {
     name: c.displayName || c.name,
     handler: c.name,
     displayName: c.displayName ?? c.name,
-    displayType: c.type ?? '',
+    buildpackType: c.buildpackType,
+    componentType: c.componentType,
+    displayType: c.displayType ?? '',
     description: c.description ?? '',
     status: c.status ?? '',
-    componentType: c.type,
     componentSubType: null,
     version: '',
     createdAt: c.createdAt ?? '',

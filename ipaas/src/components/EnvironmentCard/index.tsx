@@ -43,8 +43,8 @@ interface EnvironmentProps {
   apiId?: string;
 }
 
-export default function Environment({ env, componentId, projectId, componentType: _componentType, displayType, componentHandler, projectHandler, orgHandler, versionId, deploymentPipelineId, latestCommit, apiId }: EnvironmentProps) {
-  const isAutomation = (displayType ?? '').toLowerCase() === 'scheduledtask';
+export default function Environment({ env, componentId, projectId, componentType, displayType: _displayType, componentHandler, projectHandler, orgHandler, versionId, deploymentPipelineId, latestCommit, apiId }: EnvironmentProps) {
+  const isAutomation = (componentType ?? '').toLowerCase() === 'automation';
   const queryClient = useQueryClient();
   const [configureOpen, setConfigureOpen] = useState(false);
   const [notification, setNotification] = useState<{ text: string; severity: 'success' | 'error' } | null>(null);

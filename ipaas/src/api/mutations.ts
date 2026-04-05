@@ -117,12 +117,29 @@ export interface CreateComponentInput {
   description: string;
   orgHandler: string;
   projectId: string;
-  componentType: 'MI' | 'BI';
+  buildpackType: 'MI' | 'BI';
+  componentType: string;
 }
 
 interface CreateComponentResponse {
   component: BffComponent;
 }
+
+// Maps frontend componentType to OpenChoreo ClusterComponentType name.
+const COMPONENT_TYPE_SPEC: Record<string, string> = {
+  automation: 'deployment/scheduled-task',
+  service: 'deployment/service',
+  aiAgent: 'deployment/ai-agent',
+  eventIntegration: 'deployment/event-integration',
+  fileIntegration: 'deployment/file-integration',
+  proxy: 'deployment/proxy',
+};
+
+// Maps frontend buildpackType to OpenChoreo ClusterWorkflow name.
+const WORKFLOW_NAME: Record<string, string> = {
+  MI: 'mi-buildpack-builder',
+  BI: 'ballerina-buildpack-builder',
+};
 
 export function useCreateComponent() {
   const qc = useQueryClient();
@@ -139,9 +156,16 @@ export function useCreateComponent() {
           },
           spec: {
             owner: { projectName: input.projectId },
-            componentType: { name: input.componentType },
+            componentType: {
+              kind: 'ClusterComponentType',
+              name: COMPONENT_TYPE_SPEC[input.componentType] ?? input.componentType,
+            },
             autoBuild: true,
             autoDeploy: false,
+            workflow: {
+              kind: 'ClusterWorkflow',
+              name: WORKFLOW_NAME[input.buildpackType] ?? input.buildpackType,
+            },
           },
         })
         .then((d) => mapComponent(d.component)),

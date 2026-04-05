@@ -40,7 +40,8 @@ export default function CreateComponent(scope: ProjectScope): JSX.Element {
   const [handler, setHandler] = useState('');
   const [handlerEdited, setHandlerEdited] = useState(false);
   const [description, setDescription] = useState('');
-  const [componentType, setComponentType] = useState<'MI' | 'BI'>('MI');
+  const [buildpackType, setBuildpackType] = useState<'MI' | 'BI'>('BI');
+  const [componentType, setComponentType] = useState('automation');
   const mutation = useCreateComponent();
 
   const effectiveHandler = handlerEdited ? handler : toHandler(displayName);
@@ -67,6 +68,7 @@ export default function CreateComponent(scope: ProjectScope): JSX.Element {
       description,
       orgHandler: scope.org,
       projectId,
+      buildpackType,
       componentType,
     };
     mutation.mutate(input, {
@@ -139,9 +141,22 @@ export default function CreateComponent(scope: ProjectScope): JSX.Element {
           />
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
-          <TextField label="Integration Type" select value={componentType} onChange={(e) => setComponentType(e.target.value as 'MI' | 'BI')} fullWidth slotProps={{ htmlInput: { 'aria-label': 'Integration Type' } }}>
+          <TextField label="Buildpack" select value={buildpackType} onChange={(e) => setBuildpackType(e.target.value as 'MI' | 'BI')} fullWidth slotProps={{ htmlInput: { 'aria-label': 'Buildpack' } }}>
             <MenuItem value="MI">MI</MenuItem>
             <MenuItem value="BI">BI</MenuItem>
+          </TextField>
+        </Grid>
+      </Grid>
+
+      <Grid container spacing={3} sx={{ mb: 3 }}>
+        <Grid size={{ xs: 12, md: 4 }}>
+          <TextField label="Component Type" select value={componentType} onChange={(e) => setComponentType(e.target.value)} fullWidth slotProps={{ htmlInput: { 'aria-label': 'Component Type' } }}>
+            <MenuItem value="automation">Automation</MenuItem>
+            <MenuItem value="service">Service</MenuItem>
+            <MenuItem value="aiAgent">AI Agent</MenuItem>
+            <MenuItem value="eventIntegration">Event Integration</MenuItem>
+            <MenuItem value="fileIntegration">File Integration</MenuItem>
+            <MenuItem value="proxy">Proxy</MenuItem>
           </TextField>
         </Grid>
       </Grid>

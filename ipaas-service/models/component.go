@@ -7,7 +7,9 @@ type Component struct {
 	ProjectName      string            `json:"projectName,omitempty"`
 	DisplayName      string            `json:"displayName,omitempty"`
 	Description      string            `json:"description,omitempty"`
-	Type             string            `json:"type,omitempty"`
+	BuildpackType    string            `json:"buildpackType,omitempty"`
+	ComponentType    string            `json:"componentType,omitempty"`
+	DisplayType      string            `json:"displayType,omitempty"`
 	AutoDeploy       bool              `json:"autoDeploy,omitempty"`
 	AutoBuild        bool              `json:"autoBuild,omitempty"`
 	CreatedAt        string            `json:"createdAt,omitempty"`
