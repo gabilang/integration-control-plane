@@ -2,8 +2,12 @@ package services
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"strings"
+	"time"
 
+	"github.com/wso2/integration-control-plane/ipaas-service/clients/k8s"
 	"github.com/wso2/integration-control-plane/ipaas-service/clients/openchoreo"
 	"github.com/wso2/integration-control-plane/ipaas-service/models"
 )
@@ -19,10 +23,11 @@ type ResourceTreeService interface {
 
 type resourceTreeService struct {
 	scheduleClient openchoreo.ScheduleClient
+	jobsClient     k8s.JobsClient
 }
 
-func NewResourceTreeService(scheduleClient openchoreo.ScheduleClient) ResourceTreeService {
-	return &resourceTreeService{scheduleClient: scheduleClient}
+func NewResourceTreeService(scheduleClient openchoreo.ScheduleClient, jobsClient k8s.JobsClient) ResourceTreeService {
+	return &resourceTreeService{scheduleClient: scheduleClient, jobsClient: jobsClient}
 }
 
 func (s *resourceTreeService) GetResourceTree(ctx context.Context, orgName, componentName, environment string) (*models.ResourceTreeResponse, error) {
@@ -33,26 +38,71 @@ func (s *resourceTreeService) GetResourceTree(ctx context.Context, orgName, comp
 	return tree, nil
 }
 
-// GetExecutionsFromTree fetches the resource tree and extracts Job nodes as executions.
+// GetExecutionsFromTree fetches the resource tree and merges it with a direct
+// K8s label-selector query. The resource tree only contains Jobs owned by the
+// CronJob (scheduled runs); manually triggered Jobs have no ownerReference to
+// the CronJob and therefore don't appear in the tree. Merging both sources
+// ensures all executions are returned. Results are deduplicated by JobID and
+// sorted most-recent-first.
 func (s *resourceTreeService) GetExecutionsFromTree(ctx context.Context, orgName, componentName, environment string) (*models.ExecutionList, error) {
-	tree, err := s.scheduleClient.GetResourceTree(ctx, orgName, componentName, environment)
-	if err != nil {
-		return nil, translateScheduleHTTPError(err)
-	}
-
+	seen := make(map[string]struct{})
 	var executions []models.Execution
-	for _, release := range tree.RenderedReleases {
-		for _, node := range release.Nodes {
-			if node.Kind != "Job" {
-				continue
+
+	// 1. Resource tree: Jobs owned by the CronJob (scheduled runs).
+	tree, treeErr := s.scheduleClient.GetResourceTree(ctx, orgName, componentName, environment)
+	if treeErr == nil {
+		for _, release := range tree.RenderedReleases {
+			for _, node := range release.Nodes {
+				if node.Kind != "Job" {
+					continue
+				}
+				seen[node.Name] = struct{}{}
+				executions = append(executions, extractExecutionFromNode(node))
 			}
-			executions = append(executions, extractExecutionFromNode(node))
 		}
 	}
+
+	// 2. Direct K8s query: picks up manually triggered Jobs that are not in the tree.
+	if fallback, fbErr := s.fallbackListExecutions(ctx, orgName, componentName, environment); fbErr == nil {
+		for _, exec := range fallback.Items {
+			if _, dup := seen[exec.JobID]; dup {
+				continue
+			}
+			executions = append(executions, exec)
+		}
+	}
+
 	if executions == nil {
 		executions = []models.Execution{}
 	}
+	sortExecutionsDesc(executions)
 	return &models.ExecutionList{Items: executions}, nil
+}
+
+// sortExecutionsDesc sorts executions by StartTime descending (most recent first).
+func sortExecutionsDesc(items []models.Execution) {
+	sort.Slice(items, func(i, j int) bool {
+		ti, _ := time.Parse(time.RFC3339, items[i].StartTime)
+		tj, _ := time.Parse(time.RFC3339, items[j].StartTime)
+		return ti.After(tj)
+	})
+}
+
+// fallbackListExecutions queries K8s Jobs directly using label selectors,
+// bypassing the resource tree. Returns empty (not an error) when unavailable.
+func (s *resourceTreeService) fallbackListExecutions(ctx context.Context, orgName, componentName, environment string) (*models.ExecutionList, error) {
+	if s.jobsClient == nil {
+		return &models.ExecutionList{Items: []models.Execution{}}, nil
+	}
+	orgNs, err := s.scheduleClient.GetReleaseBindingNamespace(ctx, orgName, componentName, environment)
+	if err != nil {
+		return nil, err
+	}
+	labelSelector := fmt.Sprintf(
+		"openchoreo.dev/component=%s,openchoreo.dev/environment=%s,openchoreo.dev/namespace=%s",
+		componentName, environment, orgNs,
+	)
+	return s.jobsClient.ListJobs(ctx, labelSelector)
 }
 
 func (s *resourceTreeService) GetResourceEvents(ctx context.Context, orgName, componentName, environment, group, version, kind, name string) (*models.ResourceEventsResponse, error) {

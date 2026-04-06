@@ -68,7 +68,7 @@ export default function EnvironmentCardBody({
   notification,
 }: EnvironmentCardBodyProps) {
   const showServiceInsights = !isAutomation && envCritical && !!apiId && !!envId && !!envName && !!projectId;
-  const showAutomationInsights = isAutomation && envCritical && hasDeployment;
+  const showAutomationInsights = isAutomation && envCritical && (hasDeployment || executions.length > 0);
 
   return (
     <>
@@ -86,7 +86,12 @@ export default function EnvironmentCardBody({
           </Box>
         )
       )}
-      {isAutomation && !loadingSchedule && hasDeployment && (
+      {isAutomation && !loadingSchedule && !hasDeployment && executions.length > 0 && (
+        <Box sx={{ bgcolor: 'action.selected', borderRadius: 1, px: 2, py: 1, mb: 2 }}>
+          <Typography variant="body2" color="text.secondary">Schedule is stopped</Typography>
+        </Box>
+      )}
+      {isAutomation && !loadingSchedule && (hasDeployment || executions.length > 0) && (
         <AutomationExecutions
           executions={executions}
           projectId={projectId}
@@ -102,7 +107,7 @@ export default function EnvironmentCardBody({
           onRunSuccess={onRunSuccess}
         />
       )}
-      {isAutomation && !loadingSchedule && !hasDeployment && (
+      {isAutomation && !loadingSchedule && !hasDeployment && executions.length === 0 && (
         <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
           No deployments yet. Click &apos;{envCritical ? 'Run' : 'Test'}&apos; or use &apos;Schedule&apos; to trigger an execution.
         </Typography>

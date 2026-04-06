@@ -76,7 +76,7 @@ func main() {
 	deploymentService := services.NewDeploymentService(scheduleClient)
 	deploymentController := controllers.NewDeploymentController(deploymentService)
 
-	resourceTreeService := services.NewResourceTreeService(scheduleClient)
+	resourceTreeService := services.NewResourceTreeService(scheduleClient, jobsClient)
 	resourceTreeController := controllers.NewResourceTreeController(resourceTreeService)
 
 	loggerService := services.NewLoggerService(icpClient)
