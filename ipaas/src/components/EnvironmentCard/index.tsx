@@ -58,8 +58,8 @@ export default function Environment({ env, componentId, projectId, componentType
     isAutomation ? env.id : '',
     isAutomation ? projectId : '',
   );
-  const hasDeployment = !!schedule;
-  const cronFreq = schedule?.cronExpression ?? null;
+  const hasDeployment = !!schedule && schedule.state !== 'Undeploy';
+  const cronFreq = hasDeployment ? (schedule?.cronExpression ?? null) : null;
   const scheduleDescription = cronFreq ? describeCron(cronFreq) : null;
 
   const { data: executions = [], isLoading: _loadingExecutions } = useExecutions(
@@ -181,6 +181,7 @@ export default function Environment({ env, componentId, projectId, componentType
                   componentId,
                   projectId,
                   hasSchedule: !!cronFreq,
+                  cronExpression: cronFreq ?? undefined,
                   onSaveSuccess: () => setNotification({ text: 'Schedule updated successfully', severity: 'success' }),
                   onSaveError: () => setNotification({ text: 'Failed to save schedule. Please try again.', severity: 'error' }),
                   onStopSuccess: () => setNotification({ text: 'Schedule stopped successfully', severity: 'success' }),
