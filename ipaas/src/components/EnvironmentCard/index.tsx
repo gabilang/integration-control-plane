@@ -19,7 +19,7 @@
 import { Card, CardContent } from '@wso2/oxygen-ui';
 import { useEffect, useCallback, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useSchedule, useExecutions, useSchemaConfig, type GqlEnvironment } from '../../api/queries';
+import { useSchedule, useResourceTreeExecutions, useSchemaConfig, type GqlEnvironment } from '../../api/queries';
 import { useTriggerExecution } from '../../api/mutations';
 import { nextCronRunMs, formatTimeUntil, describeCron } from '../../utils/cronUtils';
 import EnvironmentCardHeader from './EnvironmentCardHeader';
@@ -62,10 +62,9 @@ export default function Environment({ env, componentId, projectId, componentType
   const cronFreq = hasDeployment ? (schedule?.cronExpression ?? null) : null;
   const scheduleDescription = cronFreq ? describeCron(cronFreq) : null;
 
-  const { data: executions = [], isLoading: _loadingExecutions } = useExecutions(
+  const { data: executions = [], isLoading: _loadingExecutions } = useResourceTreeExecutions(
     isAutomation ? componentId : '',
     isAutomation ? env.id : '',
-    isAutomation ? projectId : '',
   );
 
   const envTemplateId = env.templateId ?? env.id;
@@ -111,7 +110,7 @@ export default function Environment({ env, componentId, projectId, componentType
       if (diff < 1000 && Date.now() - lastScheduledTriggerRef.current > 30000) {
         lastScheduledTriggerRef.current = Date.now();
         setPendingTriggerTime(Date.now());
-        queryClient.invalidateQueries({ queryKey: ['executions', componentId, env.id] });
+        queryClient.invalidateQueries({ queryKey: ['resourceTreeExecutions', componentId, env.id] });
       }
       setNextRunLabel(`Next run in ${formatTimeUntil(ms)}`);
     } else {
@@ -138,7 +137,7 @@ export default function Environment({ env, componentId, projectId, componentType
         onSuccess: () => {
           setNotification({ text: 'Execution triggered successfully', severity: 'success' });
           setPendingTriggerTime(Date.now());
-          queryClient.invalidateQueries({ queryKey: ['executions', componentId, env.id] });
+          queryClient.invalidateQueries({ queryKey: ['resourceTreeExecutions', componentId, env.id] });
         },
         onError: (err) => {
           const msg = err instanceof Error ? err.message : 'Failed to trigger execution';
@@ -153,7 +152,7 @@ export default function Environment({ env, componentId, projectId, componentType
     try {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['schedule', componentId, env.id] }),
-        queryClient.invalidateQueries({ queryKey: ['executions', componentId, env.id] }),
+        queryClient.invalidateQueries({ queryKey: ['resourceTreeExecutions', componentId, env.id] }),
         queryClient.invalidateQueries({ queryKey: ['schemaConfig'] }),
       ]);
     } finally {
@@ -217,7 +216,7 @@ export default function Environment({ env, componentId, projectId, componentType
           onRunSuccess={() => {
             setNotification({ text: 'Execution triggered successfully', severity: 'success' });
             setPendingTriggerTime(Date.now());
-            queryClient.invalidateQueries({ queryKey: ['executions', componentId, env.id] });
+            queryClient.invalidateQueries({ queryKey: ['resourceTreeExecutions', componentId, env.id] });
           }}
           envId={env.id}
           envName={env.name}
@@ -233,7 +232,7 @@ export default function Environment({ env, componentId, projectId, componentType
           setNotification({ text: 'Execution triggered successfully', severity: 'success' });
           setPendingTriggerTime(Date.now());
           setPendingTriggerArgs(args.length > 0 ? args : null);
-          queryClient.invalidateQueries({ queryKey: ['executions', componentId, env.id] });
+          queryClient.invalidateQueries({ queryKey: ['resourceTreeExecutions', componentId, env.id] });
         }}
         envCritical={env.critical}
         projectId={projectId}

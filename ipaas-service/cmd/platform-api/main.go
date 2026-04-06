@@ -76,6 +76,9 @@ func main() {
 	deploymentService := services.NewDeploymentService(scheduleClient)
 	deploymentController := controllers.NewDeploymentController(deploymentService)
 
+	resourceTreeService := services.NewResourceTreeService(scheduleClient)
+	resourceTreeController := controllers.NewResourceTreeController(resourceTreeService)
+
 	loggerService := services.NewLoggerService(icpClient)
 	loggerController := controllers.NewLoggerController(loggerService)
 
@@ -90,8 +93,9 @@ func main() {
 		ScheduleController:    scheduleController,
 		ExecutionController:   executionController,
 		RuntimeController:     runtimeController,
-		DeploymentController:  deploymentController,
-		LoggerController:      loggerController,
+		DeploymentController:   deploymentController,
+		ResourceTreeController: resourceTreeController,
+		LoggerController:       loggerController,
 		SecretController:      secretController,
 		GraphQLProxy:          graphqlProxy,
 		AuthProxy:             authProxy,

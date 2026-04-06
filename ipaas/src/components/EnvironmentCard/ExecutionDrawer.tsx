@@ -20,7 +20,7 @@ import { Alert, Box, Button, Checkbox, CircularProgress, Divider, Drawer, FormCo
 import { ArrowLeft, CheckCircle2, Copy, Plus, RefreshCcw, Search, Trash2, X, XCircle } from '@wso2/oxygen-ui-icons-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useExecutionArguments, useExecutionLogs, type BffExecution } from '../../api/queries';
+import { useExecutionArguments, useJobPodLogs, useResourceEvents, type BffExecution } from '../../api/queries';
 import { useTriggerExecution } from '../../api/mutations';
 
 interface ExecutionDrawerProps {
@@ -121,7 +121,10 @@ export default function ExecutionDrawer({ execution, open, onClose, onRunSuccess
 
   const { data: fetchedArgs, isLoading: argsLoading } = useExecutionArguments(execution?.jobId ?? '', componentId, '', open && tab === 1 && !!execution?.jobId);
 
-  const { data: logs = [], isLoading: logsLoading } = useExecutionLogs(componentId, '', execution?.jobId ?? '', environmentId, open && view === 'logs' && !!execution?.jobId);
+  const { data: rawLogs = [], isLoading: logsLoading } = useJobPodLogs(componentId, environmentId, execution?.jobId ?? '', open && view === 'logs' && !!execution?.jobId);
+  const logs = rawLogs.map((e) => ({ timestamp: e.timestamp, message: e.log }));
+
+  const { data: events = [], isLoading: eventsLoading } = useResourceEvents(componentId, environmentId, 'v1', 'Job', execution?.jobId ?? '', 'batch', open && tab === 2 && !!execution?.jobId);
 
   const filteredLogs = useMemo(() => {
     if (!logFilterMode || !logSearch.trim()) return logs;
@@ -171,7 +174,8 @@ export default function ExecutionDrawer({ execution, open, onClose, onRunSuccess
   };
 
   const handleLogsRefresh = () => {
-    queryClient.invalidateQueries({ queryKey: ['executionLogs', componentId, '', execution?.jobId, environmentId] });
+    queryClient.invalidateQueries({ queryKey: ['resourceLogs'] });
+    queryClient.invalidateQueries({ queryKey: ['resourceTree', componentId, environmentId] });
   };
 
   return (
@@ -311,6 +315,7 @@ export default function ExecutionDrawer({ execution, open, onClose, onRunSuccess
               <Tabs value={tab} onChange={(_, v) => setTab(v)}>
                 <Tab label="Attempts" />
                 <Tab label="Arguments" />
+                <Tab label="Events" />
               </Tabs>
               <Divider />
             </Box>
@@ -396,6 +401,51 @@ export default function ExecutionDrawer({ execution, open, onClose, onRunSuccess
                         {runError}
                       </Alert>
                     )}
+                  </Stack>
+                )}
+              </Box>
+            )}
+
+            {/* Events tab */}
+            {tab === 2 && (
+              <Box sx={{ px: 2, py: 2 }}>
+                {eventsLoading ? (
+                  <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', my: 2 }} />
+                ) : events.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
+                    No events available for this execution.
+                  </Typography>
+                ) : (
+                  <Stack gap={1}>
+                    {events.map((evt, i) => (
+                      <Box key={i} sx={{ border: '1px solid', borderColor: evt.type === 'Warning' ? 'warning.main' : 'divider', borderRadius: 1, px: 2, py: 1.5 }}>
+                        <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 0.5 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 600, color: evt.type === 'Warning' ? 'warning.main' : 'text.primary' }}>
+                            {evt.reason}
+                          </Typography>
+                          {evt.count && evt.count > 1 && (
+                            <Typography variant="caption" color="text.secondary">
+                              x{evt.count}
+                            </Typography>
+                          )}
+                        </Stack>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                          {evt.message}
+                        </Typography>
+                        <Stack direction="row" gap={2}>
+                          {evt.source && (
+                            <Typography variant="caption" color="text.secondary">
+                              Source: {evt.source}
+                            </Typography>
+                          )}
+                          {evt.lastTimestamp && (
+                            <Typography variant="caption" color="text.secondary">
+                              {new Date(evt.lastTimestamp).toLocaleString()}
+                            </Typography>
+                          )}
+                        </Stack>
+                      </Box>
+                    ))}
                   </Stack>
                 )}
               </Box>

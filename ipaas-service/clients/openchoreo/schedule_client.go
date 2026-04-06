@@ -20,6 +20,9 @@ type ScheduleClient interface {
 	UpdateReleaseBinding(ctx context.Context, orgName, projectName, componentName string, req *models.UpsertScheduleRequest) (*models.Schedule, error)
 	DeleteReleaseBinding(ctx context.Context, orgName, componentName, environment string) error
 	GenerateRelease(ctx context.Context, orgName, componentName string) (string, error)
+	GetResourceTree(ctx context.Context, orgName, componentName, environment string) (*models.ResourceTreeResponse, error)
+	GetResourceEvents(ctx context.Context, orgName, componentName, environment, group, version, kind, name string) (*models.ResourceEventsResponse, error)
+	GetResourceLogs(ctx context.Context, orgName, componentName, environment, podName string, sinceSeconds *int64) (*models.PodLogsResponse, error)
 }
 
 type scheduleClient struct {
@@ -229,4 +232,129 @@ func (c *scheduleClient) DeleteReleaseBinding(ctx context.Context, _, componentN
 		return fmt.Errorf("delete release binding: %w", err)
 	}
 	return nil
+}
+
+// GetResourceTree returns the K8s resource tree for the given component's release binding.
+func (c *scheduleClient) GetResourceTree(ctx context.Context, _, componentName, environment string) (*models.ResourceTreeResponse, error) {
+	name := releaseBindingName(componentName, environment)
+	url := fmt.Sprintf("%s/releasebindings/%s/k8sresources/tree", c.baseURL, name)
+	req := c.newRequest(ctx, "openchoreo.GetResourceTree", http.MethodGet, url)
+
+	result := requests.SendRequest(ctx, c.httpClient, req)
+	var raw ocK8sResourceTreeResponse
+	if err := result.ScanResponse(&raw, http.StatusOK); err != nil {
+		return nil, fmt.Errorf("get resource tree: %w", err)
+	}
+	return normalizeResourceTree(raw), nil
+}
+
+// GetResourceEvents returns K8s events for a specific resource in the release binding's resource tree.
+func (c *scheduleClient) GetResourceEvents(ctx context.Context, _, componentName, environment, group, version, kind, name string) (*models.ResourceEventsResponse, error) {
+	rbName := releaseBindingName(componentName, environment)
+	url := fmt.Sprintf("%s/releasebindings/%s/k8sresources/events", c.baseURL, rbName)
+	req := c.newRequest(ctx, "openchoreo.GetResourceEvents", http.MethodGet, url)
+	if group != "" {
+		req.SetQuery("group", group)
+	}
+	req.SetQuery("version", version)
+	req.SetQuery("kind", kind)
+	req.SetQuery("name", name)
+
+	result := requests.SendRequest(ctx, c.httpClient, req)
+	var raw ocResourceEventsResponse
+	if err := result.ScanResponse(&raw, http.StatusOK); err != nil {
+		return nil, fmt.Errorf("get resource events: %w", err)
+	}
+	return normalizeResourceEvents(raw), nil
+}
+
+// GetResourceLogs returns logs for a specific pod in the release binding's resource tree.
+func (c *scheduleClient) GetResourceLogs(ctx context.Context, _, componentName, environment, podName string, sinceSeconds *int64) (*models.PodLogsResponse, error) {
+	rbName := releaseBindingName(componentName, environment)
+	url := fmt.Sprintf("%s/releasebindings/%s/k8sresources/logs", c.baseURL, rbName)
+	req := c.newRequest(ctx, "openchoreo.GetResourceLogs", http.MethodGet, url)
+	req.SetQuery("podName", podName)
+	if sinceSeconds != nil {
+		req.SetQuery("sinceSeconds", fmt.Sprintf("%d", *sinceSeconds))
+	}
+
+	result := requests.SendRequest(ctx, c.httpClient, req)
+	var raw ocResourcePodLogsResponse
+	if err := result.ScanResponse(&raw, http.StatusOK); err != nil {
+		return nil, fmt.Errorf("get resource logs: %w", err)
+	}
+	return normalizeResourceLogs(raw), nil
+}
+
+func normalizeResourceTree(raw ocK8sResourceTreeResponse) *models.ResourceTreeResponse {
+	releases := make([]models.ReleaseResourceTree, len(raw.RenderedReleases))
+	for i, rr := range raw.RenderedReleases {
+		nodes := make([]models.ResourceNode, len(rr.Nodes))
+		for j, n := range rr.Nodes {
+			parentRefs := make([]models.ResourceRef, len(n.ParentRefs))
+			for k, pr := range n.ParentRefs {
+				parentRefs[k] = models.ResourceRef{
+					Group:     pr.Group,
+					Version:   pr.Version,
+					Kind:      pr.Kind,
+					Namespace: pr.Namespace,
+					Name:      pr.Name,
+					UID:       pr.UID,
+				}
+			}
+			var health *models.HealthInfo
+			if n.Health != nil {
+				health = &models.HealthInfo{
+					Status:  n.Health.Status,
+					Message: n.Health.Message,
+				}
+			}
+			nodes[j] = models.ResourceNode{
+				Group:           n.Group,
+				Version:         n.Version,
+				Kind:            n.Kind,
+				Namespace:       n.Namespace,
+				Name:            n.Name,
+				UID:             n.UID,
+				ResourceVersion: n.ResourceVersion,
+				CreatedAt:       n.CreatedAt,
+				ParentRefs:      parentRefs,
+				Object:          n.Object,
+				Health:          health,
+			}
+		}
+		releases[i] = models.ReleaseResourceTree{
+			Name:        rr.Name,
+			TargetPlane: rr.TargetPlane,
+			Nodes:       nodes,
+		}
+	}
+	return &models.ResourceTreeResponse{RenderedReleases: releases}
+}
+
+func normalizeResourceEvents(raw ocResourceEventsResponse) *models.ResourceEventsResponse {
+	events := make([]models.ResourceEvent, len(raw.Events))
+	for i, e := range raw.Events {
+		events[i] = models.ResourceEvent{
+			Type:           e.Type,
+			Reason:         e.Reason,
+			Message:        e.Message,
+			Count:          e.Count,
+			FirstTimestamp: e.FirstTimestamp,
+			LastTimestamp:   e.LastTimestamp,
+			Source:         e.Source,
+		}
+	}
+	return &models.ResourceEventsResponse{Events: events}
+}
+
+func normalizeResourceLogs(raw ocResourcePodLogsResponse) *models.PodLogsResponse {
+	entries := make([]models.PodLogEntry, len(raw.LogEntries))
+	for i, e := range raw.LogEntries {
+		entries[i] = models.PodLogEntry{
+			Timestamp: e.Timestamp,
+			Log:       e.Log,
+		}
+	}
+	return &models.PodLogsResponse{LogEntries: entries}
 }

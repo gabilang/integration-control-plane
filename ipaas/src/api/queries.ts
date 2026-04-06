@@ -1065,3 +1065,155 @@ export function useRefreshEnvironmentArtifacts() {
     ]);
   };
 }
+
+// ── Resource Tree APIs (OpenChoreo ReleaseBinding resource tree) ──
+
+export interface ResourceRef {
+  group?: string;
+  version: string;
+  kind: string;
+  namespace?: string;
+  name: string;
+  uid: string;
+}
+
+export interface HealthInfo {
+  status: string;
+  message?: string;
+}
+
+export interface ResourceNode {
+  group?: string;
+  version: string;
+  kind: string;
+  namespace?: string;
+  name: string;
+  uid: string;
+  resourceVersion?: string;
+  createdAt?: string;
+  parentRefs?: ResourceRef[];
+  object?: Record<string, unknown>;
+  health?: HealthInfo;
+}
+
+export interface ReleaseResourceTree {
+  name: string;
+  targetPlane: string;
+  nodes: ResourceNode[];
+}
+
+export interface ResourceTreeResponse {
+  renderedReleases: ReleaseResourceTree[];
+}
+
+export function useResourceTree(componentId: string, envId: string) {
+  return useQuery({
+    queryKey: ['resourceTree', componentId, envId],
+    queryFn: () =>
+      icpClient
+        .get<ResourceTreeResponse>(
+          `/components/${encodeURIComponent(componentId)}/environments/${encodeURIComponent(envId)}/resource-tree`,
+        )
+        .catch(() => null),
+    enabled: !!componentId && !!envId,
+    retry: false,
+    staleTime: 15000,
+  });
+}
+
+export function useResourceTreeExecutions(componentId: string, envId: string) {
+  return useQuery({
+    queryKey: ['resourceTreeExecutions', componentId, envId],
+    queryFn: () =>
+      icpClient
+        .get<{ items: BffExecution[] }>(
+          `/components/${encodeURIComponent(componentId)}/environments/${encodeURIComponent(envId)}/resource-tree/executions`,
+        )
+        .then((d) => d.items ?? [])
+        .catch(() => []),
+    enabled: !!componentId && !!envId,
+    retry: false,
+    staleTime: 0,
+    refetchInterval: 15000,
+  });
+}
+
+export interface BffResourceEvent {
+  type: string;
+  reason: string;
+  message: string;
+  count?: number;
+  firstTimestamp?: string;
+  lastTimestamp?: string;
+  source?: string;
+}
+
+export function useResourceEvents(componentId: string, envId: string, version: string, kind: string, name: string, group?: string, enabled = true) {
+  return useQuery({
+    queryKey: ['resourceEvents', componentId, envId, group, version, kind, name],
+    queryFn: () => {
+      const params: Record<string, string> = { version, kind, name };
+      if (group) params.group = group;
+      return icpClient
+        .get<{ events: BffResourceEvent[] }>(
+          `/components/${encodeURIComponent(componentId)}/environments/${encodeURIComponent(envId)}/resource-events`,
+          params,
+        )
+        .then((d) => d.events ?? [])
+        .catch(() => []);
+    },
+    enabled: enabled && !!componentId && !!envId && !!version && !!kind && !!name,
+    retry: false,
+    staleTime: 15000,
+  });
+}
+
+export interface BffPodLogEntry {
+  timestamp: string;
+  log: string;
+}
+
+export function useResourceLogs(componentId: string, envId: string, podName: string, sinceSeconds?: number, enabled = true) {
+  return useQuery({
+    queryKey: ['resourceLogs', componentId, envId, podName, sinceSeconds],
+    queryFn: () => {
+      const params: Record<string, string> = { podName };
+      if (sinceSeconds !== undefined) params.sinceSeconds = String(sinceSeconds);
+      return icpClient
+        .get<{ logEntries: BffPodLogEntry[] }>(
+          `/components/${encodeURIComponent(componentId)}/environments/${encodeURIComponent(envId)}/resource-logs`,
+          params,
+        )
+        .then((d) => d.logEntries ?? [])
+        .catch(() => []);
+    },
+    enabled: enabled && !!componentId && !!envId && !!podName,
+    retry: false,
+    staleTime: 30000,
+  });
+}
+
+/**
+ * Helper: finds the pod name for a given job from the resource tree.
+ * Looks for a Pod node whose parentRefs include the Job node's UID.
+ */
+export function findPodForJob(tree: ResourceTreeResponse | null | undefined, jobId: string): string | null {
+  if (!tree) return null;
+  for (const release of tree.renderedReleases) {
+    const jobNode = release.nodes.find((n) => n.kind === 'Job' && n.name === jobId);
+    if (!jobNode) continue;
+    const pod = release.nodes.find((n) => n.kind === 'Pod' && n.parentRefs?.some((ref) => ref.uid === jobNode.uid));
+    if (pod) return pod.name;
+  }
+  return null;
+}
+
+/**
+ * Fetches pod logs for a specific job by first resolving the pod name from the resource tree.
+ */
+export function useJobPodLogs(componentId: string, envId: string, jobId: string, enabled = true) {
+  const { data: tree } = useResourceTree(enabled ? componentId : '', enabled ? envId : '');
+  const podName = findPodForJob(tree, jobId);
+
+  return useResourceLogs(componentId, envId, podName ?? '', undefined, enabled && !!podName);
+}

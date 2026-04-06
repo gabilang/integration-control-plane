@@ -22,9 +22,10 @@ type AppParams struct {
 	DeploymentController  controllers.DeploymentController
 	LoggerController      controllers.LoggerController
 	SecretController      controllers.SecretController
-	GraphQLProxy          *icp.ProxyClient
-	AuthProxy             *icp.ProxyClient
-	ObservabilityProxy    *icp.ProxyClient
+	ResourceTreeController controllers.ResourceTreeController
+	GraphQLProxy           *icp.ProxyClient
+	AuthProxy              *icp.ProxyClient
+	ObservabilityProxy     *icp.ProxyClient
 }
 
 // NewHandler assembles the full HTTP handler with middleware and routes.
@@ -49,6 +50,7 @@ func NewHandler(params AppParams) http.Handler {
 	registerArtifactRoutes(apiMux, params.ArtifactController)
 	registerRuntimeRoutes(apiMux, params.RuntimeController)
 	registerDeploymentRoutes(apiMux, params.DeploymentController)
+	registerResourceTreeRoutes(apiMux, params.ResourceTreeController)
 	registerLoggerRoutes(apiMux, params.LoggerController)
 	registerSecretRoutes(apiMux, params.SecretController)
 	registerGraphQLRoute(apiMux, params.GraphQLProxy)

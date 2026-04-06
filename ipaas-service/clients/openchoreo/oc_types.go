@@ -194,6 +194,69 @@ type ocReleaseBindingList struct {
 	Items []ocReleaseBinding `json:"items"`
 }
 
+// -- K8s Resource Tree -------------------------------------------------------
+
+type ocResourceRef struct {
+	Group     string `json:"group,omitempty"`
+	Version   string `json:"version"`
+	Kind      string `json:"kind"`
+	Namespace string `json:"namespace,omitempty"`
+	Name      string `json:"name"`
+	UID       string `json:"uid"`
+}
+
+type ocHealthInfo struct {
+	Status  string `json:"status"`
+	Message string `json:"message,omitempty"`
+}
+
+type ocResourceNode struct {
+	Group           string                 `json:"group,omitempty"`
+	Version         string                 `json:"version"`
+	Kind            string                 `json:"kind"`
+	Namespace       string                 `json:"namespace,omitempty"`
+	Name            string                 `json:"name"`
+	UID             string                 `json:"uid"`
+	ResourceVersion string                 `json:"resourceVersion,omitempty"`
+	CreatedAt       string                 `json:"createdAt,omitempty"`
+	ParentRefs      []ocResourceRef        `json:"parentRefs,omitempty"`
+	Object          map[string]any         `json:"object,omitempty"`
+	Health          *ocHealthInfo          `json:"health,omitempty"`
+}
+
+type ocReleaseResourceTree struct {
+	Name        string           `json:"name"`
+	TargetPlane string           `json:"targetPlane"`
+	Nodes       []ocResourceNode `json:"nodes"`
+}
+
+type ocK8sResourceTreeResponse struct {
+	RenderedReleases []ocReleaseResourceTree `json:"renderedReleases"`
+}
+
+type ocResourceEvent struct {
+	Type           string `json:"type"`
+	Reason         string `json:"reason"`
+	Message        string `json:"message"`
+	Count          int    `json:"count,omitempty"`
+	FirstTimestamp string `json:"firstTimestamp,omitempty"`
+	LastTimestamp   string `json:"lastTimestamp,omitempty"`
+	Source         string `json:"source,omitempty"`
+}
+
+type ocResourceEventsResponse struct {
+	Events []ocResourceEvent `json:"events"`
+}
+
+type ocPodLogEntry struct {
+	Timestamp string `json:"timestamp"`
+	Log       string `json:"log"`
+}
+
+type ocResourcePodLogsResponse struct {
+	LogEntries []ocPodLogEntry `json:"logEntries"`
+}
+
 // -- ComponentRelease --------------------------------------------------------
 
 type ocComponentRelease struct {
