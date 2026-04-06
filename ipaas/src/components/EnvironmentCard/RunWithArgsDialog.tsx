@@ -19,23 +19,22 @@
 import { Alert, Box, Button, CircularProgress, Drawer, IconButton, Link, Stack, TextField, Typography } from '@wso2/oxygen-ui';
 import { Plus, Trash2, X } from '@wso2/oxygen-ui-icons-react';
 import { useState } from 'react';
-import { useTriggerComponent } from '../../api/mutations';
+import { useTriggerExecution } from '../../api/mutations';
 
 export interface RunWithArgsDialogProps {
   open: boolean;
   onClose: () => void;
   onRunSuccess?: (args: string[]) => void;
   envCritical?: boolean | null;
-  orgHandler: string;
   projectId: string;
   componentId: string;
-  releaseId: string;
+  environment: string;
 }
 
-export default function RunWithArgsDialog({ open, onClose, onRunSuccess, orgHandler, projectId, componentId, releaseId }: RunWithArgsDialogProps) {
+export default function RunWithArgsDialog({ open, onClose, onRunSuccess, projectId, componentId, environment }: RunWithArgsDialogProps) {
   const [args, setArgs] = useState<string[]>(['']);
   const [runError, setRunError] = useState<string | null>(null);
-  const trigger = useTriggerComponent();
+  const trigger = useTriggerExecution();
 
   const handleAddArg = () => setArgs((prev) => [...prev, '']);
 
@@ -47,10 +46,8 @@ export default function RunWithArgsDialog({ open, onClose, onRunSuccess, orgHand
 
   const handleRun = () => {
     setRunError(null);
-    const execArgs = args.filter((a) => a.trim() !== '').map((a) => ({ argument_name: '', argument_value: a }));
-
     trigger.mutate(
-      { orgHandler, projectId, componentId, releaseId, args: execArgs },
+      { componentId, projectId, environment },
       {
         onSuccess: () => {
           const resolvedArgs = args.filter((a) => a.trim() !== '');
@@ -142,7 +139,7 @@ export default function RunWithArgsDialog({ open, onClose, onRunSuccess, orgHand
 
       <Stack direction="row" justifyContent="flex-end" gap={1} sx={{ px: 2, py: 1.5, borderTop: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
         <Button onClick={handleClose}>Cancel</Button>
-        <Button variant="contained" onClick={handleRun} disabled={trigger.isPending || !releaseId} startIcon={trigger.isPending ? <CircularProgress color="inherit" size={16} /> : undefined}>
+        <Button variant="contained" onClick={handleRun} disabled={trigger.isPending} startIcon={trigger.isPending ? <CircularProgress color="inherit" size={16} /> : undefined}>
           {trigger.isPending ? 'Executing…' : 'Execute'}
         </Button>
       </Stack>

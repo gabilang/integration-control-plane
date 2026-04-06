@@ -20,7 +20,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { authenticatedFetch, refreshAccessToken } from '../auth/tokenManager';
 import type { GqlArtifact, GqlComponent, GqlEnvironment } from './queries';
 import { icpClient } from './client';
-import { mapComponent, mapEnvironment, mapProject, type BffComponent, type BffEnvironment, type BffProject, type SchemaConfigItem } from './queries';
+import { mapComponent, mapEnvironment, mapProject, type BffComponent, type BffEnvironment, type BffExecution, type BffProject, type BffSchedule, type SchemaConfigItem } from './queries';
 import { toBackendArtifactType } from './artifactToggleMutations';
 import type { DeployComponentInput, UpdateBuildpackConfigsInput } from '../types/build';
 
@@ -651,6 +651,82 @@ export function useTriggerComponent() {
     },
     onSuccess: (_data, input) => {
       qc.invalidateQueries({ queryKey: ['taskExecutions', input.releaseId] });
+    },
+  });
+}
+
+// ── Schedule REST mutations ──
+
+export interface UpsertScheduleInput {
+  componentId: string;
+  projectId: string;
+  environment: string;
+  cronExpression: string;
+  state?: string;
+  backoffLimit?: number;
+  activeDeadlineSeconds?: number;
+}
+
+export function useUpsertSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpsertScheduleInput) =>
+      icpClient.post<BffSchedule>(
+        `/components/${encodeURIComponent(input.componentId)}/schedules`,
+        {
+          environment: input.environment,
+          cronExpression: input.cronExpression,
+          state: input.state ?? 'Active',
+          backoffLimit: input.backoffLimit,
+          activeDeadlineSeconds: input.activeDeadlineSeconds,
+        },
+        { projectName: input.projectId },
+      ),
+    onSuccess: (_data, input) => {
+      qc.invalidateQueries({ queryKey: ['schedule', input.componentId, input.environment] });
+      qc.invalidateQueries({ queryKey: ['componentDeployment'] });
+      qc.invalidateQueries({ queryKey: ['executions', input.componentId, input.environment] });
+    },
+  });
+}
+
+export interface DeleteScheduleInput {
+  componentId: string;
+  projectId: string;
+  environment: string;
+}
+
+export function useDeleteSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: DeleteScheduleInput) =>
+      icpClient.delete<void>(
+        `/components/${encodeURIComponent(input.componentId)}/schedules/${encodeURIComponent(input.environment)}?projectName=${encodeURIComponent(input.projectId)}`,
+      ),
+    onSuccess: (_data, input) => {
+      qc.invalidateQueries({ queryKey: ['schedule', input.componentId, input.environment] });
+      qc.invalidateQueries({ queryKey: ['componentDeployment'] });
+    },
+  });
+}
+
+export interface TriggerExecutionInput {
+  componentId: string;
+  projectId: string;
+  environment: string;
+}
+
+export function useTriggerExecution() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: TriggerExecutionInput) =>
+      icpClient.post<BffExecution>(
+        `/components/${encodeURIComponent(input.componentId)}/schedules/${encodeURIComponent(input.environment)}/executions`,
+        {},
+        { projectName: input.projectId },
+      ),
+    onSuccess: (_data, input) => {
+      qc.invalidateQueries({ queryKey: ['executions', input.componentId, input.environment] });
     },
   });
 }

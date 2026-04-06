@@ -951,6 +951,63 @@ export function useTaskExecutionCount(releaseId: string) {
   });
 }
 
+// ── Schedule (REST — replaces useComponentDeployment + useExecutionConfigs for automation) ──
+
+export interface BffSchedule {
+  environment: string;
+  componentName?: string;
+  projectName?: string;
+  cronExpression: string;
+  state: string;
+  imagePullPolicy?: string;
+  releaseName?: string;
+  backoffLimit?: number | null;
+  activeDeadlineSeconds?: number | null;
+}
+
+export function useSchedule(componentId: string, envId: string, projectId: string) {
+  return useQuery({
+    queryKey: ['schedule', componentId, envId],
+    queryFn: () =>
+      icpClient
+        .get<BffSchedule>(
+          `/components/${encodeURIComponent(componentId)}/schedules/${encodeURIComponent(envId)}`,
+          { projectName: projectId },
+        )
+        .catch(() => null),
+    enabled: !!componentId && !!envId && !!projectId,
+    retry: false,
+  });
+}
+
+// ── Executions (REST — replaces useTaskExecutions) ──
+
+export interface BffExecution {
+  jobId: string;
+  status: string;
+  startTime?: string;
+  completionTime?: string;
+  revisionId?: string;
+}
+
+export function useExecutions(componentId: string, envId: string, projectId: string) {
+  return useQuery({
+    queryKey: ['executions', componentId, envId],
+    queryFn: () =>
+      icpClient
+        .get<{ items: BffExecution[] }>(
+          `/components/${encodeURIComponent(componentId)}/schedules/${encodeURIComponent(envId)}/executions`,
+          { projectName: projectId },
+        )
+        .then((d) => d.items ?? [])
+        .catch(() => []),
+    enabled: !!componentId && !!envId && !!projectId,
+    retry: false,
+    staleTime: 0,
+    refetchInterval: 15000,
+  });
+}
+
 // ── Schema-based configurable values ──
 
 export interface SchemaConfigValue {

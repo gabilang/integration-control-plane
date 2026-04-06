@@ -19,16 +19,14 @@
 import { Button, CircularProgress, IconButton, ListingTable, TablePagination, Typography } from '@wso2/oxygen-ui';
 import { CheckCircle2, ChevronRight, XCircle } from '@wso2/oxygen-ui-icons-react';
 import { Fragment, useEffect, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { useTaskExecutions, type TaskExecution } from '../api/queries';
+import type { BffExecution } from '../api/queries';
 import ExecutionDrawer from './EnvironmentCard/ExecutionDrawer';
 import LogsDrawer from './EnvironmentCard/LogsDrawer';
 
 interface AutomationExecutionsProps {
-  releaseId: string;
+  executions: BffExecution[];
   projectId: string;
   componentId: string;
-  deploymentTrackId: string;
   environmentId: string;
   orgHandler: string;
   projectHandler: string;
@@ -42,18 +40,22 @@ interface AutomationExecutionsProps {
 
 const QUEUED_SENTINEL = '__queued__';
 
-function formatTriggeredAt(unixSeconds: string): string {
-  if (!unixSeconds) return '—';
-  const date = new Date(parseInt(unixSeconds, 10) * 1000);
+function formatTriggeredAt(timestamp: string): string {
+  if (!timestamp) return '—';
+  const date = new Date(timestamp);
+  if (isNaN(date.getTime())) return '—';
   const today = new Date();
   const timeStr = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   if (date.toDateString() === today.toDateString()) return `Today at ${timeStr}`;
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) + ` at ${timeStr}`;
 }
 
-function formatDuration(startUnix: string, endUnix: string): string {
-  if (!startUnix || !endUnix) return '—';
-  const diff = parseInt(endUnix, 10) - parseInt(startUnix, 10);
+function formatDuration(startTime: string, completionTime: string): string {
+  if (!startTime || !completionTime) return '—';
+  const start = new Date(startTime).getTime();
+  const end = new Date(completionTime).getTime();
+  if (isNaN(start) || isNaN(end)) return '—';
+  const diff = Math.floor((end - start) / 1000);
   if (diff < 0) return '—';
   const minutes = Math.floor(diff / 60);
   const seconds = diff % 60;
@@ -61,10 +63,10 @@ function formatDuration(startUnix: string, endUnix: string): string {
   return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
 }
 
-function isInProgress(status: string, _completionTime: string): boolean {
+function isInProgress(status: string): boolean {
   const val = status?.toLowerCase();
-  if (val === 'succeeded' || val === 'success' || val === 'failed' || val === 'failure') return false;
-  return true; // InProgress, Queued, or any non-terminal status
+  if (val === 'succeeded' || val === 'success' || val === 'complete' || val === 'failed' || val === 'failure') return false;
+  return true;
 }
 
 function StatusIcon({ status, inProgress }: { status: string; inProgress: boolean }) {
@@ -76,21 +78,18 @@ function StatusIcon({ status, inProgress }: { status: string; inProgress: boolea
 }
 
 // Synthetic "queued" execution shown immediately after triggering, before the API returns
-const QUEUED_EXECUTION: TaskExecution = {
-  id: QUEUED_SENTINEL,
+const QUEUED_EXECUTION: BffExecution = {
+  jobId: QUEUED_SENTINEL,
   startTime: '',
   completionTime: '',
-  runId: '',
   revisionId: '',
-  failedReason: '',
   status: 'Queued',
 };
 
 export default function AutomationExecutions({
-  releaseId,
+  executions,
   projectId,
   componentId,
-  deploymentTrackId,
   environmentId,
   orgHandler,
   projectHandler,
@@ -101,34 +100,20 @@ export default function AutomationExecutions({
   onTriggerResolved,
   onRunSuccess,
 }: AutomationExecutionsProps) {
-  const queryClient = useQueryClient();
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
-  const [selectedExecution, setSelectedExecution] = useState<TaskExecution | null>(null);
-  const [logsExecution, setLogsExecution] = useState<TaskExecution | null>(null);
+  const [selectedExecution, setSelectedExecution] = useState<BffExecution | null>(null);
+  const [logsExecution, setLogsExecution] = useState<BffExecution | null>(null);
 
-  const { data: executions = [], isLoading } = useTaskExecutions(releaseId);
-
-  // Only poll while there is something to wait for: a pending trigger, an in-progress execution,
-  // or an extended-poll window opened after the 60s sentinel timeout fires.
-  const hasInProgress = executions.some((e) => isInProgress(e.status, e.completionTime));
+  const hasInProgress = executions.some((e) => isInProgress(e.status));
   const [extendPoll, setExtendPoll] = useState(false);
-  const shouldPoll = !!pendingTriggerTime || hasInProgress || extendPoll;
-
-  useEffect(() => {
-    if (!releaseId || !shouldPoll) return;
-    const timer = setInterval(() => {
-      queryClient.invalidateQueries({ queryKey: ['taskExecutions', releaseId] });
-    }, 3000);
-    return () => clearInterval(timer);
-  }, [releaseId, shouldPoll, queryClient]);
+  const _shouldPoll = !!pendingTriggerTime || hasInProgress || extendPoll;
 
   // Detect when the real new execution arrives and clear the queued sentinel
   useEffect(() => {
     if (!pendingTriggerTime || executions.length === 0) return;
-    const latestStartMs = parseInt(executions[0].startTime, 10) * 1000;
-    // The latest execution started after (or within 5s before) the trigger → it's the new one
-    if (latestStartMs >= pendingTriggerTime - 5000) {
+    const latestStartMs = new Date(executions[0].startTime ?? '').getTime();
+    if (!isNaN(latestStartMs) && latestStartMs >= pendingTriggerTime - 5000) {
       onTriggerResolved?.();
     }
   }, [executions, pendingTriggerTime, onTriggerResolved]);
@@ -156,16 +141,12 @@ export default function AutomationExecutions({
   }, [extendPoll, executions]);
 
   // Show the queued sentinel row at position 0 while pendingTriggerTime is set and no new exec arrived
-  const showQueued = !!pendingTriggerTime && (executions.length === 0 || parseInt(executions[0].startTime, 10) * 1000 < pendingTriggerTime - 5000);
+  const showQueued = !!pendingTriggerTime && (executions.length === 0 || new Date(executions[0].startTime ?? '').getTime() < pendingTriggerTime - 5000);
   const allExecutions = showQueued ? [QUEUED_EXECUTION, ...executions] : executions;
 
   const maxPage = Math.max(0, Math.ceil(allExecutions.length / rowsPerPage) - 1);
   const safePage = Math.min(page, maxPage);
   const paged = allExecutions.slice(safePage * rowsPerPage, safePage * rowsPerPage + rowsPerPage);
-
-  if (isLoading) {
-    return <CircularProgress size={24} sx={{ display: 'block', mx: 'auto', py: 4 }} />;
-  }
 
   if (allExecutions.length === 0) {
     return (
@@ -191,17 +172,17 @@ export default function AutomationExecutions({
           </ListingTable.Head>
           <ListingTable.Body>
             {paged.map((e) => {
-              const inProgress = isInProgress(e.status, e.completionTime);
+              const inProgress = isInProgress(e.status);
               return (
-                <ListingTable.Row key={e.id}>
+                <ListingTable.Row key={e.jobId}>
                   <ListingTable.Cell>
                     <StatusIcon status={e.status} inProgress={inProgress} />
                   </ListingTable.Cell>
                   <ListingTable.Cell>
-                    <Typography variant="body2">{inProgress ? '--' : formatTriggeredAt(e.startTime)}</Typography>
+                    <Typography variant="body2">{inProgress ? '--' : formatTriggeredAt(e.startTime ?? '')}</Typography>
                   </ListingTable.Cell>
                   <ListingTable.Cell>
-                    <Typography variant="body2">{inProgress ? '--' : formatDuration(e.startTime, e.completionTime)}</Typography>
+                    <Typography variant="body2">{inProgress ? '--' : formatDuration(e.startTime ?? '', e.completionTime ?? '')}</Typography>
                   </ListingTable.Cell>
                   <ListingTable.Cell>
                     <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
@@ -220,7 +201,7 @@ export default function AutomationExecutions({
                     )}
                   </ListingTable.Cell>
                   <ListingTable.Cell>
-                    {e.id !== QUEUED_SENTINEL && (
+                    {e.jobId !== QUEUED_SENTINEL && (
                       <IconButton size="small" aria-label="View execution details" onClick={() => setSelectedExecution(e)}>
                         <ChevronRight size={16} />
                       </IconButton>
@@ -256,12 +237,10 @@ export default function AutomationExecutions({
         componentHandler={componentHandler}
         projectId={projectId}
         componentId={componentId}
-        releaseId={releaseId}
-        deploymentTrackId={deploymentTrackId}
         environmentId={environmentId}
       />
 
-      <LogsDrawer open={!!logsExecution} onClose={() => setLogsExecution(null)} executionId={logsExecution?.id ?? ''} componentId={componentId} deploymentTrackId={deploymentTrackId} environmentId={environmentId} />
+      <LogsDrawer open={!!logsExecution} onClose={() => setLogsExecution(null)} executionId={logsExecution?.jobId ?? ''} componentId={componentId} environmentId={environmentId} />
     </Fragment>
   );
 }

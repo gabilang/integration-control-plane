@@ -27,7 +27,6 @@ interface LogsDrawerProps {
   onClose: () => void;
   executionId: string;
   componentId: string;
-  deploymentTrackId: string;
   environmentId: string;
 }
 
@@ -57,9 +56,9 @@ const drawerSx = {
   },
 } as const;
 
-export default function LogsDrawer({ open, onClose, executionId, componentId, deploymentTrackId, environmentId }: LogsDrawerProps) {
+export default function LogsDrawer({ open, onClose, executionId, componentId, environmentId }: LogsDrawerProps) {
   const queryClient = useQueryClient();
-  const { data: logs = [], isLoading } = useExecutionLogs(componentId, deploymentTrackId, executionId, environmentId, open && !!executionId);
+  const { data: logs = [], isLoading } = useExecutionLogs(componentId, '', executionId, environmentId, open && !!executionId);
   const [search, setSearch] = useState('');
   const [filterMode, setFilterMode] = useState(false);
 
@@ -69,7 +68,7 @@ export default function LogsDrawer({ open, onClose, executionId, componentId, de
   };
 
   const handleRefresh = () => {
-    queryClient.invalidateQueries({ queryKey: ['executionLogs', componentId, deploymentTrackId, executionId, environmentId] });
+    queryClient.invalidateQueries({ queryKey: ['executionLogs', componentId, '', executionId, environmentId] });
   };
 
   const filtered = useMemo(() => {

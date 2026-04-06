@@ -19,9 +19,8 @@
 import { Card, CardContent } from '@wso2/oxygen-ui';
 import { useEffect, useCallback, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useComponentDeployment, useExecutionConfigs, useSchemaConfig, type GqlEnvironment } from '../../api/queries';
-import { getOrgUuidFromToken } from '../../auth/tokenManager';
-import { useTriggerComponent } from '../../api/mutations';
+import { useSchedule, useExecutions, useSchemaConfig, type GqlEnvironment } from '../../api/queries';
+import { useTriggerExecution } from '../../api/mutations';
 import { nextCronRunMs, formatTimeUntil, describeCron } from '../../utils/cronUtils';
 import EnvironmentCardHeader from './EnvironmentCardHeader';
 import EnvironmentCardBody from './EnvironmentCardBody';
@@ -43,7 +42,7 @@ interface EnvironmentProps {
   apiId?: string;
 }
 
-export default function Environment({ env, componentId, projectId, componentType, displayType: _displayType, componentHandler, projectHandler, orgHandler, versionId, deploymentPipelineId, latestCommit, apiId }: EnvironmentProps) {
+export default function Environment({ env, componentId, projectId, componentType, displayType: _displayType, componentHandler, projectHandler, orgHandler, versionId, deploymentPipelineId: _deploymentPipelineId, latestCommit, apiId }: EnvironmentProps) {
   const isAutomation = (componentType ?? '').toLowerCase() === 'automation';
   const queryClient = useQueryClient();
   const [configureOpen, setConfigureOpen] = useState(false);
@@ -52,12 +51,22 @@ export default function Environment({ env, componentId, projectId, componentType
   const [pendingTriggerArgs, setPendingTriggerArgs] = useState<string[] | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [runWithArgsOpen, setRunWithArgsOpen] = useState(false);
-  const trigger = useTriggerComponent();
-  const envOrgUuid = getOrgUuidFromToken() ?? '';
-  const { data: envDeployment, isLoading: loadingEnvDeployment } = useComponentDeployment(isAutomation ? orgHandler : '', isAutomation ? envOrgUuid : '', isAutomation ? componentId : '', isAutomation ? versionId : '', isAutomation ? env.id : '');
-  const envReleaseId = envDeployment?.releaseId ?? '';
-  const { data: scheduleConfig } = useExecutionConfigs(isAutomation ? componentId : '', isAutomation ? envReleaseId : '');
-  const scheduleDescription = scheduleConfig?.cronjobFrequency ? `${describeCron(scheduleConfig.cronjobFrequency)}, in time zone ${scheduleConfig.cronjobTimezone || 'UTC'}` : null;
+  const trigger = useTriggerExecution();
+
+  const { data: schedule, isLoading: loadingSchedule } = useSchedule(
+    isAutomation ? componentId : '',
+    isAutomation ? env.id : '',
+    isAutomation ? projectId : '',
+  );
+  const hasDeployment = !!schedule;
+  const cronFreq = schedule?.cronExpression ?? null;
+  const scheduleDescription = cronFreq ? describeCron(cronFreq) : null;
+
+  const { data: executions = [], isLoading: _loadingExecutions } = useExecutions(
+    isAutomation ? componentId : '',
+    isAutomation ? env.id : '',
+    isAutomation ? projectId : '',
+  );
 
   const envTemplateId = env.templateId ?? env.id;
   const { data: schemaConfig } = useSchemaConfig(isAutomation ? projectId : '', isAutomation ? componentId : '', isAutomation ? envTemplateId : '', isAutomation ? versionId : '', latestCommit?.sha);
@@ -90,7 +99,6 @@ export default function Environment({ env, componentId, projectId, componentType
   }, [schemaConfig]);
 
   const [nextRunLabel, setNextRunLabel] = useState<string | null>(null);
-  const cronFreq = scheduleConfig?.cronjobFrequency ?? null;
   const lastScheduledTriggerRef = useRef<number>(0);
   const updateNextRun = useCallback(() => {
     if (!cronFreq) {
@@ -103,13 +111,13 @@ export default function Environment({ env, componentId, projectId, componentType
       if (diff < 1000 && Date.now() - lastScheduledTriggerRef.current > 30000) {
         lastScheduledTriggerRef.current = Date.now();
         setPendingTriggerTime(Date.now());
-        queryClient.invalidateQueries({ queryKey: ['taskExecutions'] });
+        queryClient.invalidateQueries({ queryKey: ['executions', componentId, env.id] });
       }
       setNextRunLabel(`Next run in ${formatTimeUntil(ms)}`);
     } else {
       setNextRunLabel(null);
     }
-  }, [cronFreq, queryClient]);
+  }, [cronFreq, queryClient, componentId, env.id]);
   useEffect(() => {
     updateNextRun();
     const timer = setInterval(updateNextRun, 1000);
@@ -125,12 +133,12 @@ export default function Environment({ env, componentId, projectId, componentType
 
   const handleRun = () => {
     trigger.mutate(
-      { orgHandler, projectId, componentId, releaseId: envReleaseId, args: [] },
+      { componentId, projectId, environment: env.id },
       {
         onSuccess: () => {
           setNotification({ text: 'Execution triggered successfully', severity: 'success' });
           setPendingTriggerTime(Date.now());
-          queryClient.invalidateQueries({ queryKey: ['taskExecutions'] });
+          queryClient.invalidateQueries({ queryKey: ['executions', componentId, env.id] });
         },
         onError: (err) => {
           const msg = err instanceof Error ? err.message : 'Failed to trigger execution';
@@ -144,9 +152,8 @@ export default function Environment({ env, componentId, projectId, componentType
     setIsRefreshing(true);
     try {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['componentDeployment'] }),
-        queryClient.invalidateQueries({ queryKey: ['executionConfigs'] }),
-        queryClient.invalidateQueries({ queryKey: ['taskExecutions'] }),
+        queryClient.invalidateQueries({ queryKey: ['schedule', componentId, env.id] }),
+        queryClient.invalidateQueries({ queryKey: ['executions', componentId, env.id] }),
         queryClient.invalidateQueries({ queryKey: ['schemaConfig'] }),
       ]);
     } finally {
@@ -165,19 +172,15 @@ export default function Environment({ env, componentId, projectId, componentType
           nextRunLabel={nextRunLabel}
           isRefreshing={isRefreshing}
           deployTrackIsPending={trigger.isPending}
-          hasDeployment={!!envDeployment}
+          hasDeployment={hasDeployment}
           scheduleButtonProps={
             isAutomation
               ? {
                   envId: env.id,
                   envName: env.name,
                   componentId,
-                  orgHandler,
                   projectId,
-                  releaseId: envReleaseId,
-                  versionId,
-                  deploymentPipelineId,
-                  hasSchedule: !!scheduleConfig?.cronjobFrequency,
+                  hasSchedule: !!cronFreq,
                   onSaveSuccess: () => setNotification({ text: 'Schedule updated successfully', severity: 'success' }),
                   onSaveError: () => setNotification({ text: 'Failed to save schedule. Please try again.', severity: 'error' }),
                   onStopSuccess: () => setNotification({ text: 'Schedule stopped successfully', severity: 'success' }),
@@ -193,13 +196,12 @@ export default function Environment({ env, componentId, projectId, componentType
 
         <EnvironmentCardBody
           isAutomation={isAutomation}
-          loadingEnvDeployment={loadingEnvDeployment}
-          hasDeployment={!!envDeployment}
+          loadingSchedule={loadingSchedule}
+          hasDeployment={hasDeployment}
           scheduleDescription={scheduleDescription}
-          releaseId={envReleaseId}
+          executions={executions}
           projectId={projectId}
           componentId={componentId}
-          deploymentTrackId={versionId}
           environmentId={env.id}
           orgHandler={orgHandler}
           projectHandler={projectHandler}
@@ -214,7 +216,7 @@ export default function Environment({ env, componentId, projectId, componentType
           onRunSuccess={() => {
             setNotification({ text: 'Execution triggered successfully', severity: 'success' });
             setPendingTriggerTime(Date.now());
-            queryClient.invalidateQueries({ queryKey: ['taskExecutions'] });
+            queryClient.invalidateQueries({ queryKey: ['executions', componentId, env.id] });
           }}
           envId={env.id}
           envName={env.name}
@@ -230,13 +232,12 @@ export default function Environment({ env, componentId, projectId, componentType
           setNotification({ text: 'Execution triggered successfully', severity: 'success' });
           setPendingTriggerTime(Date.now());
           setPendingTriggerArgs(args.length > 0 ? args : null);
-          queryClient.invalidateQueries({ queryKey: ['taskExecutions'] });
+          queryClient.invalidateQueries({ queryKey: ['executions', componentId, env.id] });
         }}
         envCritical={env.critical}
-        orgHandler={orgHandler}
         projectId={projectId}
         componentId={componentId}
-        releaseId={envReleaseId}
+        environment={env.id}
       />
 
       <ConfigureDrawer open={configureOpen} onClose={() => setConfigureOpen(false)} projectId={projectId} componentId={componentId} envId={envTemplateId} deploymentTrackId={versionId} commitHash={latestCommit?.sha} />

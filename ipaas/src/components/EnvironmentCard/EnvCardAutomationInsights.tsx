@@ -16,19 +16,18 @@
  * under the License.
  */
 
-import { Avatar, Box, CircularProgress, Divider, Stack, Typography } from '@wso2/oxygen-ui';
+import { Avatar, Box, Divider, Stack, Typography } from '@wso2/oxygen-ui';
 import { Activity, AlertTriangle, Clock, TrendingUp } from '@wso2/oxygen-ui-icons-react';
-import { useTaskExecutionCount, useTaskExecutions } from '../../api/queries';
+import type { BffExecution } from '../../api/queries';
 
 interface MetricTileProps {
   icon: React.ReactNode;
   label: string;
   value: number | null;
   unit?: string;
-  loading: boolean;
 }
 
-function MetricTile({ icon, label, value, unit, loading }: MetricTileProps) {
+function MetricTile({ icon, label, value, unit }: MetricTileProps) {
   return (
     <Stack direction="row" alignItems="center" gap={1.5} sx={{ flex: 1, minWidth: 0 }}>
       <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main', flexShrink: 0 }}>{icon}</Avatar>
@@ -36,36 +35,34 @@ function MetricTile({ icon, label, value, unit, loading }: MetricTileProps) {
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', whiteSpace: 'nowrap' }}>
           {label}
         </Typography>
-        {loading ? (
-          <CircularProgress size={16} />
-        ) : (
-          <Stack direction="row" alignItems="baseline" gap={0.5}>
-            <Typography variant="body1" fontWeight={600}>
-              {value ?? '—'}
+        <Stack direction="row" alignItems="baseline" gap={0.5}>
+          <Typography variant="body1" fontWeight={600}>
+            {value ?? '—'}
+          </Typography>
+          {unit && value !== null && (
+            <Typography variant="caption" color="text.secondary">
+              {unit}
             </Typography>
-            {unit && value !== null && (
-              <Typography variant="caption" color="text.secondary">
-                {unit}
-              </Typography>
-            )}
-          </Stack>
-        )}
+          )}
+        </Stack>
       </Box>
     </Stack>
   );
 }
 
 interface EnvCardAutomationInsightsProps {
-  releaseId: string;
+  executions: BffExecution[];
 }
 
-export default function EnvCardAutomationInsights({ releaseId }: EnvCardAutomationInsightsProps) {
-  const { data: count, isLoading: countLoading } = useTaskExecutionCount(releaseId);
-  const { data: executions, isLoading: execLoading } = useTaskExecutions(releaseId);
+export default function EnvCardAutomationInsights({ executions }: EnvCardAutomationInsightsProps) {
+  const durations = executions
+    .map((e) => {
+      if (!e.startTime || !e.completionTime) return 0;
+      return Math.floor((new Date(e.completionTime).getTime() - new Date(e.startTime).getTime()) / 1000);
+    })
+    .filter((d) => d > 0);
 
-  const durations = executions?.map((e) => Number(e.completionTime) - Number(e.startTime)).filter((d) => d > 0) ?? [];
-
-  const errorRate = executions?.length ? Math.round((executions.filter((e) => e.status !== 'Succeeded').length / executions.length) * 100) : null;
+  const errorRate = executions.length ? Math.round((executions.filter((e) => e.status?.toLowerCase() !== 'succeeded' && e.status?.toLowerCase() !== 'success').length / executions.length) * 100) : null;
 
   const avgDuration = durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : null;
 
@@ -81,10 +78,10 @@ export default function EnvCardAutomationInsights({ releaseId }: EnvCardAutomati
     <>
       <Divider sx={{ mt: 2, mb: 1.5 }} />
       <Stack direction="row" gap={2} flexWrap="wrap">
-        <MetricTile icon={<AlertTriangle size={16} />} label="Error Rate" value={errorRate} unit="%" loading={execLoading} />
-        <MetricTile icon={<Clock size={16} />} label="Avg Duration" value={avgDuration} unit="s" loading={execLoading} />
-        <MetricTile icon={<Activity size={16} />} label="99th Percentile Latency" value={p99Duration} unit="s" loading={execLoading} />
-        <MetricTile icon={<TrendingUp size={16} />} label="Total Executions" value={count ?? null} loading={countLoading} />
+        <MetricTile icon={<AlertTriangle size={16} />} label="Error Rate" value={errorRate} unit="%" />
+        <MetricTile icon={<Clock size={16} />} label="Avg Duration" value={avgDuration} unit="s" />
+        <MetricTile icon={<Activity size={16} />} label="99th Percentile Latency" value={p99Duration} unit="s" />
+        <MetricTile icon={<TrendingUp size={16} />} label="Total Executions" value={executions.length} />
       </Stack>
     </>
   );

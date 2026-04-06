@@ -21,18 +21,14 @@ import { CalendarClock, ChevronDown } from '@wso2/oxygen-ui-icons-react';
 import { useRef, useState } from 'react';
 import Authorized from '../Authorized';
 import { Permissions } from '../../constants/permissions';
-import { useStopDeployment } from '../../api/mutations';
+import { useDeleteSchedule } from '../../api/mutations';
 import ScheduleDialog from './ScheduleDialog';
 
 export interface ScheduleButtonProps {
   envId: string;
   envName: string;
   componentId: string;
-  orgHandler: string;
   projectId: string;
-  releaseId: string;
-  versionId: string;
-  deploymentPipelineId: string;
   hasSchedule: boolean;
   disabled?: boolean;
   onSaveSuccess?: () => void;
@@ -44,11 +40,14 @@ export default function ScheduleButton({ hasSchedule, disabled, onSaveSuccess, o
   const [dialogOpen, setDialogOpen] = useState(false);
   const [splitOpen, setSplitOpen] = useState(false);
   const splitButtonRef = useRef<HTMLDivElement>(null);
-  const stopDeployment = useStopDeployment();
+  const deleteSchedule = useDeleteSchedule();
 
   const handleStopSchedule = () => {
     setSplitOpen(false);
-    stopDeployment.mutate({ orgHandler: dialogProps.orgHandler, componentId: dialogProps.componentId, releaseId: dialogProps.releaseId, environment: dialogProps.envId }, { onSuccess: () => onStopSuccess?.() });
+    deleteSchedule.mutate(
+      { componentId: dialogProps.componentId, projectId: dialogProps.projectId, environment: dialogProps.envId },
+      { onSuccess: () => onStopSuccess?.() },
+    );
   };
 
   return (
@@ -70,7 +69,7 @@ export default function ScheduleButton({ hasSchedule, disabled, onSaveSuccess, o
                   <Paper elevation={3}>
                     <ClickAwayListener onClickAway={() => setSplitOpen(false)}>
                       <MenuList dense sx={{ minWidth: 160 }}>
-                        <MenuItem onClick={handleStopSchedule} disabled={stopDeployment.isPending}>
+                        <MenuItem onClick={handleStopSchedule} disabled={deleteSchedule.isPending}>
                           Stop Schedule
                         </MenuItem>
                       </MenuList>

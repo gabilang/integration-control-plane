@@ -17,19 +17,19 @@
  */
 
 import { Alert, Box, Divider, Typography } from '@wso2/oxygen-ui';
+import type { BffExecution } from '../../api/queries';
 import AutomationExecutions from '../AutomationExecutions';
 import EnvCardInsights from './EnvCardInsights';
 import EnvCardAutomationInsights from './EnvCardAutomationInsights';
 
 interface EnvironmentCardBodyProps {
   isAutomation: boolean;
-  loadingEnvDeployment: boolean;
+  loadingSchedule: boolean;
   hasDeployment: boolean;
   scheduleDescription: string | null;
-  releaseId: string;
+  executions: BffExecution[];
   projectId: string;
   componentId: string;
-  deploymentTrackId: string;
   environmentId: string;
   orgHandler: string;
   projectHandler: string;
@@ -47,13 +47,12 @@ interface EnvironmentCardBodyProps {
 
 export default function EnvironmentCardBody({
   isAutomation,
-  loadingEnvDeployment,
+  loadingSchedule,
   hasDeployment,
   scheduleDescription,
-  releaseId,
+  executions,
   projectId,
   componentId,
-  deploymentTrackId,
   environmentId,
   orgHandler,
   projectHandler,
@@ -69,7 +68,7 @@ export default function EnvironmentCardBody({
   notification,
 }: EnvironmentCardBodyProps) {
   const showServiceInsights = !isAutomation && envCritical && !!apiId && !!envId && !!envName && !!projectId;
-  const showAutomationInsights = isAutomation && envCritical && !!releaseId;
+  const showAutomationInsights = isAutomation && envCritical && hasDeployment;
 
   return (
     <>
@@ -87,12 +86,11 @@ export default function EnvironmentCardBody({
           </Box>
         )
       )}
-      {isAutomation && !loadingEnvDeployment && hasDeployment && (
+      {isAutomation && !loadingSchedule && hasDeployment && (
         <AutomationExecutions
-          releaseId={releaseId}
+          executions={executions}
           projectId={projectId}
           componentId={componentId}
-          deploymentTrackId={deploymentTrackId}
           environmentId={environmentId}
           orgHandler={orgHandler}
           projectHandler={projectHandler}
@@ -104,13 +102,13 @@ export default function EnvironmentCardBody({
           onRunSuccess={onRunSuccess}
         />
       )}
-      {isAutomation && !loadingEnvDeployment && !hasDeployment && (
+      {isAutomation && !loadingSchedule && !hasDeployment && (
         <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
           No deployments yet. Click &apos;{envCritical ? 'Run' : 'Test'}&apos; or use &apos;Schedule&apos; to trigger an execution.
         </Typography>
       )}
       {showServiceInsights && <EnvCardInsights envName={envName!} envId={envId!} projectId={projectId!} apiId={apiId!} />}
-      {showAutomationInsights && <EnvCardAutomationInsights releaseId={releaseId} />}
+      {showAutomationInsights && <EnvCardAutomationInsights executions={executions} />}
     </>
   );
 }
