@@ -179,18 +179,18 @@ export default function AutomationExecutions({
                     <StatusIcon status={e.status} inProgress={inProgress} />
                   </ListingTable.Cell>
                   <ListingTable.Cell>
-                    <Typography variant="body2">{inProgress ? '--' : formatTriggeredAt(e.startTime ?? '')}</Typography>
+                    <Typography variant="body2">{formatTriggeredAt(e.startTime ?? '')}</Typography>
                   </ListingTable.Cell>
                   <ListingTable.Cell>
                     <Typography variant="body2">{inProgress ? '--' : formatDuration(e.startTime ?? '', e.completionTime ?? '')}</Typography>
                   </ListingTable.Cell>
                   <ListingTable.Cell>
                     <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                      {inProgress ? '--' : e.revisionId ? e.revisionId.substring(0, 7) : '—'}
+                      {e.revisionId ? e.revisionId.substring(0, 7) : '—'}
                     </Typography>
                   </ListingTable.Cell>
                   <ListingTable.Cell>
-                    {inProgress ? (
+                    {e.jobId === QUEUED_SENTINEL ? (
                       <Typography variant="body2" color="text.secondary">
                         --
                       </Typography>
