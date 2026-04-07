@@ -3,10 +3,12 @@ package services
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
 
+	ghclient "github.com/wso2/integration-control-plane/ipaas-service/clients/github"
 	"github.com/wso2/integration-control-plane/ipaas-service/clients/k8s"
 	"github.com/wso2/integration-control-plane/ipaas-service/clients/openchoreo"
 	"github.com/wso2/integration-control-plane/ipaas-service/models"
@@ -22,12 +24,14 @@ type ResourceTreeService interface {
 }
 
 type resourceTreeService struct {
-	scheduleClient openchoreo.ScheduleClient
-	jobsClient     k8s.JobsClient
+	scheduleClient  openchoreo.ScheduleClient
+	jobsClient      k8s.JobsClient
+	componentClient openchoreo.ComponentClient
+	ghClient        *ghclient.Client
 }
 
-func NewResourceTreeService(scheduleClient openchoreo.ScheduleClient, jobsClient k8s.JobsClient) ResourceTreeService {
-	return &resourceTreeService{scheduleClient: scheduleClient, jobsClient: jobsClient}
+func NewResourceTreeService(scheduleClient openchoreo.ScheduleClient, jobsClient k8s.JobsClient, componentClient openchoreo.ComponentClient, ghClient *ghclient.Client) ResourceTreeService {
+	return &resourceTreeService{scheduleClient: scheduleClient, jobsClient: jobsClient, componentClient: componentClient, ghClient: ghClient}
 }
 
 func (s *resourceTreeService) GetResourceTree(ctx context.Context, orgName, componentName, environment string) (*models.ResourceTreeResponse, error) {
@@ -75,6 +79,7 @@ func (s *resourceTreeService) GetExecutionsFromTree(ctx context.Context, orgName
 	if executions == nil {
 		executions = []models.Execution{}
 	}
+	s.resolvePathSpecificRevisions(ctx, componentName, executions)
 	sortExecutionsDesc(executions)
 	return &models.ExecutionList{Items: executions}, nil
 }
@@ -103,6 +108,46 @@ func (s *resourceTreeService) fallbackListExecutions(ctx context.Context, orgNam
 		componentName, environment, orgNs,
 	)
 	return s.jobsClient.ListJobs(ctx, labelSelector)
+}
+
+// resolvePathSpecificRevisions replaces each execution's revisionId (which is the
+// repo-wide HEAD at build time) with the last commit that actually touched the
+// component's subdirectory.
+func (s *resourceTreeService) resolvePathSpecificRevisions(ctx context.Context, componentName string, executions []models.Execution) {
+	if s.ghClient == nil || !s.ghClient.IsAvailable() || s.componentClient == nil {
+		return
+	}
+
+	track, err := s.componentClient.GetDeploymentTrack(ctx, componentName)
+	if err != nil || track.URL == "" || track.AppPath == "" || track.AppPath == "/" || track.AppPath == "." {
+		return
+	}
+
+	// Collect unique revisionIds to avoid duplicate GitHub API calls.
+	unique := make(map[string]string) // repoCommit → pathCommit
+	for _, e := range executions {
+		if e.RevisionID != "" {
+			unique[e.RevisionID] = ""
+		}
+	}
+
+	for repoCommit := range unique {
+		commits, ghErr := s.ghClient.GetCommits(ctx, track.URL, repoCommit, track.AppPath, 1)
+		if ghErr != nil {
+			slog.WarnContext(ctx, "failed to resolve path-specific commit",
+				"component", componentName, "commit", repoCommit, "error", ghErr)
+			continue
+		}
+		if len(commits) > 0 {
+			unique[repoCommit] = commits[0].SHA
+		}
+	}
+
+	for i := range executions {
+		if mapped, ok := unique[executions[i].RevisionID]; ok && mapped != "" {
+			executions[i].RevisionID = mapped
+		}
+	}
 }
 
 func (s *resourceTreeService) GetResourceEvents(ctx context.Context, orgName, componentName, environment, group, version, kind, name string) (*models.ResourceEventsResponse, error) {

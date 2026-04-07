@@ -41,12 +41,11 @@ export default function PromoteButton({ orgHandler, componentId, projectId, vers
   const promote = usePromote();
 
   const deploymentsLoading = sourceLoading || targetLoading;
-  const buildId = sourceDeployment?.build?.buildId;
   const sourceReleaseId = sourceDeployment?.releaseId;
-  const alreadyPromoted = !deploymentsLoading && !!buildId && buildId === targetDeployment?.build?.buildId;
+  const alreadyPromoted = !deploymentsLoading && !!sourceReleaseId && sourceReleaseId === targetDeployment?.releaseId;
 
   const handlePromote = () => {
-    if (!buildId || !sourceReleaseId || alreadyPromoted) return;
+    if (!sourceReleaseId || alreadyPromoted) return;
     promote.mutate({
       componentId,
       projectName: projectId,
@@ -57,13 +56,13 @@ export default function PromoteButton({ orgHandler, componentId, projectId, vers
     });
   };
 
-  const tooltipTitle = !buildId ? 'No build available to promote' : alreadyPromoted ? 'Already deployed in target environment' : '';
+  const tooltipTitle = !sourceReleaseId ? 'No deployment available to promote' : alreadyPromoted ? 'Already deployed in target environment' : '';
 
   return (
     <Authorized permissions={Permissions.ENVIRONMENT_MANAGE}>
       <Tooltip title={tooltipTitle}>
         <span>
-          <Button variant="outlined" size="small" startIcon={<ArrowDown size={14} />} disabled={deploymentsLoading || !buildId || !sourceReleaseId || alreadyPromoted || promote.isPending} onClick={handlePromote}>
+          <Button variant="outlined" size="small" startIcon={<ArrowDown size={14} />} disabled={deploymentsLoading || !sourceReleaseId || alreadyPromoted || promote.isPending} onClick={handlePromote}>
             {promote.isPending ? 'Promoting…' : 'Promote'}
           </Button>
         </span>
