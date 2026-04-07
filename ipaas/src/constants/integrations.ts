@@ -37,6 +37,19 @@ export const SUPPORTED_DISPLAY_TYPES = new Set([
   'ballerinaFileIntegration',
   'miFileIntegration',
   'byoiService',
+  // OpenChoreo BFF display types (buildpack + componentType)
+  'miAutomation',
+  'miService',
+  'miAiAgent',
+  'miEventIntegration',
+  'miFileIntegration',
+  'miProxy',
+  'biAutomation',
+  'biService',
+  'biAiAgent',
+  'biEventIntegration',
+  'biFileIntegration',
+  'biProxy'
 ]);
 
 /**
@@ -62,17 +75,24 @@ export function getDisplayLabel(displayType: string, componentSubType: string | 
     case 'thirdPartyApi':
     case 'prismMockService':
     case 'service':
+    case 'miService':
+    case 'biService':
       return 'Integration as API';
     case 'scheduledTask':
     case 'byocCronjob':
     case 'byoiCronjob':
     case 'miCronjob':
     case 'buildpackCronJob':
+    case 'automation':
+    case 'miAutomation':
+    case 'biAutomation':
       return 'Automation';
     case 'manualTrigger':
       return 'Manual Trigger';
     case 'proxy':
     case 'gitProxy':
+    case 'miProxy':
+    case 'biProxy':
       return 'REST API Proxy';
     case 'webhook':
     case 'byocWebhook':
@@ -84,6 +104,9 @@ export function getDisplayLabel(displayType: string, componentSubType: string | 
     case 'miEventHandler':
     case 'buildpackEventHandler':
     case 'ballerinaEventHandler':
+    case 'eventIntegration':
+    case 'miEventIntegration':
+    case 'biEventIntegration':
       return 'Event Integration';
     case 'restApi':
     case 'byocRestApi':
@@ -106,6 +129,14 @@ export function getDisplayLabel(displayType: string, componentSubType: string | 
     case 'miJob':
     case 'buildpackJob':
       return 'Manual Task';
+    case 'fileIntegration':
+    case 'miFileIntegration':
+    case 'biFileIntegration':
+      return 'File Integration';
+    case 'aiAgent':
+    case 'miAiAgent':
+    case 'biAiAgent':
+      return 'AI Agent';
     default:
       return displayType ?? 'Unknown';
   }
