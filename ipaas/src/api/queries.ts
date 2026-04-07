@@ -136,10 +136,10 @@ export function mapComponent(c: BffComponent): GqlComponent {
     displayType: c.displayType ?? '',
     description: c.description ?? '',
     status: c.status ?? '',
-    componentSubType: null,
+    componentSubType: c.componentType ?? null,
     version: '',
     createdAt: c.createdAt ?? '',
-    lastBuildDate: '',
+    lastBuildDate: c.createdAt ?? '',
     labels: [],
     apiId: undefined,
   };
@@ -237,32 +237,23 @@ export function useProjectByHandler(handler: string) {
 }
 
 export interface ProjectContributor {
-  id: number;
   displayName: string;
   email: string;
-  pictureUrl: string | null;
+  avatarUrl: string;
   totalContributions: number;
 }
 
-const PROJECT_CONTRIBUTORS_QUERY = `
-  query GetProjectContributors($orgId: Int!, $projectId: String!) {
-    project(orgId: $orgId, projectId: $projectId) {
-      projectContributorsData {
-        contributorCount
-        contributors { id, pictureUrl, email, displayName, totalContributions }
-      }
-    }
-  }`;
+interface BffContributorList {
+  items: ProjectContributor[];
+}
 
-export function useProjectContributors(projectId: string) {
-  const id = orgId();
+export function useProjectContributors(projectName: string) {
   return useQuery({
-    queryKey: ['projectContributors', projectId, id],
+    queryKey: ['projectContributors', projectName],
     queryFn: () =>
-      gql<{ project: { projectContributorsData: { contributorCount: number; contributors: ProjectContributor[] } } }>(PROJECT_CONTRIBUTORS_QUERY, { orgId: id, projectId })
-        .then((d) => d.project?.projectContributorsData?.contributors ?? [])
-        .catch(() => []),
-    enabled: !!projectId && id > 0,
+      icpClient.get<BffContributorList>(`/projects/${encodeURIComponent(projectName)}/contributors`)
+        .then((d) => d.items),
+    enabled: !!projectName,
     staleTime: 5 * 60 * 1000,
   });
 }
@@ -311,16 +302,16 @@ export interface GqlComponentDetail extends GqlComponent {
   apiVersions?: GqlApiVersion[];
 }
 
-const COMPONENT_BY_HANDLER_QUERY = `
-  query GetComponent($projectId: String!, $componentHandler: String!) {
-    component(projectId: $projectId, componentHandler: $componentHandler) {
-      projectId, id, name, handler, displayName, displayType,
-      description, status, componentSubType,
-      version, createdAt, lastBuildDate, orgHandler, labels, apiId,
-      deploymentTracks { id }
-      apiVersions { id, apiVersion, branch, latest, accessibility }
-    }
-  }`;
+// const COMPONENT_BY_HANDLER_QUERY = `
+//   query GetComponent($projectId: String!, $componentHandler: String!) {
+//     component(projectId: $projectId, componentHandler: $componentHandler) {
+//       projectId, id, name, handler, displayName, displayType,
+//       description, status, componentSubType,
+//       version, createdAt, lastBuildDate, orgHandler, labels, apiId,
+//       deploymentTracks { id }
+//       apiVersions { id, apiVersion, branch, latest, accessibility }
+//     }
+//   }`;
 
 export function useComponentByHandler(projectName: string, handler: string | undefined) {
   return useQuery({

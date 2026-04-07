@@ -31,14 +31,6 @@ func main() {
 	setupLogger(cfg.LogLevel)
 
 	// Wire dependencies
-	projectClient := openchoreo.NewProjectClient(cfg.PlatformAPI.BaseURL, cfg.PlatformAPI.HostHeader)
-	projectService := services.NewProjectService(projectClient)
-	projectController := controllers.NewProjectController(projectService)
-
-	environmentClient := openchoreo.NewEnvironmentClient(cfg.PlatformAPI.BaseURL, cfg.PlatformAPI.HostHeader)
-	environmentService := services.NewEnvironmentService(environmentClient)
-	environmentController := controllers.NewEnvironmentController(environmentService)
-
 	componentClient := openchoreo.NewComponentClient(cfg.PlatformAPI.BaseURL, cfg.PlatformAPI.HostHeader)
 	var observClient observability.Client
 	if cfg.Observability.BaseURL != "" {
@@ -57,6 +49,14 @@ func main() {
 
 	componentService := services.NewComponentService(componentClient, observClient, icpClient, githubClient)
 	componentController := controllers.NewComponentController(componentService)
+
+	projectClient := openchoreo.NewProjectClient(cfg.PlatformAPI.BaseURL, cfg.PlatformAPI.HostHeader)
+	projectService := services.NewProjectService(projectClient, componentService)
+	projectController := controllers.NewProjectController(projectService)
+
+	environmentClient := openchoreo.NewEnvironmentClient(cfg.PlatformAPI.BaseURL, cfg.PlatformAPI.HostHeader)
+	environmentService := services.NewEnvironmentService(environmentClient)
+	environmentController := controllers.NewEnvironmentController(environmentService)
 
 	scheduleClient := openchoreo.NewScheduleClient(cfg.PlatformAPI.BaseURL, cfg.PlatformAPI.HostHeader)
 	scheduleService := services.NewScheduleService(scheduleClient, componentClient)

@@ -12,4 +12,5 @@ func registerProjectRoutes(mux *http.ServeMux, c controllers.ProjectController) 
 	mux.HandleFunc("GET /projects/{projectName}", c.GetProject)
 	mux.HandleFunc("PUT /projects/{projectName}", c.UpdateProject)
 	mux.HandleFunc("DELETE /projects/{projectName}", c.DeleteProject)
+	mux.HandleFunc("GET /projects/{projectName}/contributors", c.GetProjectContributors)
 }

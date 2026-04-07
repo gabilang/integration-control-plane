@@ -30,3 +30,16 @@ type UpdateProjectRequest struct {
 	Description        string `json:"description,omitempty"`
 	DeploymentPipeline string `json:"deploymentPipeline,omitempty"`
 }
+
+// Contributor represents a user who has contributed commits to a project.
+type Contributor struct {
+	DisplayName        string `json:"displayName"`
+	Email              string `json:"email"`
+	AvatarURL          string `json:"avatarUrl,omitempty"`
+	TotalContributions int    `json:"totalContributions"`
+}
+
+// ContributorList is the response for project contributors.
+type ContributorList struct {
+	Items []Contributor `json:"items"`
+}

@@ -19,6 +19,7 @@ type ProjectController interface {
 	CreateProject(w http.ResponseWriter, r *http.Request)
 	UpdateProject(w http.ResponseWriter, r *http.Request)
 	DeleteProject(w http.ResponseWriter, r *http.Request)
+	GetProjectContributors(w http.ResponseWriter, r *http.Request)
 }
 
 type projectController struct {
@@ -173,4 +174,26 @@ func (c *projectController) DeleteProject(w http.ResponseWriter, r *http.Request
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (c *projectController) GetProjectContributors(w http.ResponseWriter, r *http.Request) {
+	org, ok := orgHandle(r)
+	if !ok {
+		utils.WriteErrorResponse(w, http.StatusUnauthorized, "missing org context")
+		return
+	}
+	projectName := r.PathValue("projectName")
+
+	contributors, err := c.service.GetProjectContributors(r.Context(), org, projectName)
+	if err != nil {
+		if errors.Is(err, services.ErrUnauthorized) {
+			utils.WriteErrorResponse(w, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
+		slog.ErrorContext(r.Context(), "get project contributors failed", "error", err, "org", org, "project", projectName)
+		utils.WriteErrorResponse(w, http.StatusInternalServerError, "failed to get project contributors")
+		return
+	}
+
+	utils.WriteSuccessResponse(w, http.StatusOK, contributors)
 }

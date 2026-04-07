@@ -42,7 +42,7 @@ export default function ContributorsCard({ projectId }: { projectId: string }): 
           {contributors.map((contributor) => (
             <Tooltip key={contributor.id} title={`${contributor.displayName || contributor.email} · ${contributor.totalContributions} contributions`}>
               <Avatar
-                src={contributor.pictureUrl || undefined}
+                src={contributor.avatarUrl || undefined}
                 tabIndex={0}
                 aria-label={`${contributor.displayName || contributor.email}: ${contributor.totalContributions} contributions`}
                 sx={{ width: 32, height: 32, fontSize: 14, bgcolor: 'primary.main', color: 'primary.contrastText', cursor: 'default' }}>

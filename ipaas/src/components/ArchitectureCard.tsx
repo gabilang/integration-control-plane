@@ -25,7 +25,7 @@ import type { GqlComponent } from '../api/queries';
 import type { JSX } from 'react';
 
 function getComponentType(displayType: string, componentSubType: string | null): ComponentType | null {
-  if (componentSubType === 'ballerinaFileIntegration' || componentSubType === 'miFileIntegration') {
+  if (componentSubType === 'ballerinaFileIntegration' || componentSubType === 'miFileIntegration' || componentSubType === 'fileIntegration') {
     return ComponentType.EVENT_HANDLER;
   }
   if (componentSubType === 'aiAgent' || componentSubType === 'mcpServer') {
@@ -41,6 +41,8 @@ function getComponentType(displayType: string, componentSubType: string | null):
     case 'thirdPartyApi':
     case 'prismMockService':
     case 'service':
+    case 'miService':
+    case 'biService':
     case 'restApi':
     case 'byocRestApi':
     case 'miRestApi':
@@ -51,6 +53,9 @@ function getComponentType(displayType: string, componentSubType: string | null):
     case 'byoiCronjob':
     case 'miCronjob':
     case 'buildpackCronJob':
+    case 'automation':
+    case 'miAutomation':
+    case 'biAutomation':
       return ComponentType.SCHEDULED_TASK;
     case 'manualTrigger':
     case 'byocJob':
@@ -60,6 +65,8 @@ function getComponentType(displayType: string, componentSubType: string | null):
       return ComponentType.MANUAL_TASK;
     case 'proxy':
     case 'gitProxy':
+    case 'miProxy':
+    case 'biProxy':
       return ComponentType.API_PROXY;
     case 'webhook':
     case 'byocWebhook':
@@ -71,6 +78,9 @@ function getComponentType(displayType: string, componentSubType: string | null):
     case 'miEventHandler':
     case 'buildpackEventHandler':
     case 'ballerinaEventHandler':
+    case 'eventIntegration':
+    case 'miEventIntegration':
+    case 'biEventIntegration':
       return ComponentType.EVENT_HANDLER;
     case 'byocWebApp':
     case 'byocWebAppsDockerfileLess':
