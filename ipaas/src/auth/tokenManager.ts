@@ -420,6 +420,18 @@ export function getAndClearRedirectUrl(): string | null {
   return url;
 }
 
+const LAST_PROJECT_URL_KEY = 'icp_last_project';
+
+export function saveLastProjectUrl(url: string): void {
+  localStorage.setItem(LAST_PROJECT_URL_KEY, url);
+}
+
+export function getAndClearLastProjectUrl(): string | null {
+  const url = localStorage.getItem(LAST_PROJECT_URL_KEY);
+  localStorage.removeItem(LAST_PROJECT_URL_KEY);
+  return url;
+}
+
 export function generateAndSaveOIDCState(): string {
   const state = crypto.randomUUID();
   localStorage.setItem(OIDC_STATE_KEY, state);

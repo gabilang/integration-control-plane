@@ -52,6 +52,7 @@ interface MockAuthState {
   user: typeof MOCK_USER | null;
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
+  clearSession: () => void;
   getDecodedIdToken: () => Promise<Record<string, unknown>>;
   getAccessToken: () => Promise<string>;
   http: {
@@ -98,6 +99,11 @@ export function MockAuthProvider({ children }: { children: ReactNode }) {
 
     signOut: async () => {
       console.log('[MockAuth] signOut called - redirecting to /login');
+      window.location.href = '/login';
+    },
+
+    clearSession: () => {
+      console.log('[MockAuth] clearSession called - redirecting to /login');
       window.location.href = '/login';
     },
 

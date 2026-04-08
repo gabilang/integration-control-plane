@@ -56,6 +56,7 @@ import { mockNotifications } from '../mock-data/mockNotifications';
 import { useScope, useResource, resourceUrl, broaden, narrow, newProjectUrl, newComponentUrl, sidebarItems, hasProject, hasComponent, type Resource } from '../nav';
 import { componentOverviewUrl, cookiePolicyUrl, loginUrl, orgHomeUrl, privacyPolicyUrl, profileUrl, projectHomeUrl } from '../paths';
 import { useAsgardeo } from '../auth';
+import { saveLastProjectUrl } from '../auth/tokenManager';
 import { useAccessControl } from '../contexts/AccessControlContext';
 import { ALL_USER_MGT_PERMISSIONS, Permissions } from '../constants/permissions';
 
@@ -83,7 +84,7 @@ export default function AppLayout(): JSX.Element {
   const resource = useResource();
 
   const queryClient = useQueryClient();
-  const { user, signOut } = useAsgardeo();
+  const { user, clearSession } = useAsgardeo();
   const username = user?.username ?? '';
   const displayName = user?.displayName ?? (user as Record<string, unknown> | null)?.name as string ?? '';
   const pictureUrl = (user as Record<string, unknown> | null)?.picture as string ?? '';
@@ -156,6 +157,13 @@ export default function AppLayout(): JSX.Element {
     orgPermsLoadedRef.current = scope.org;
     setOrgPermissions(Object.values(Permissions));
   }, [scope.org, setOrgPermissions]);
+
+  // Track the last visited project so sign-in can redirect back to it
+  useEffect(() => {
+    if (hasProject(scope)) {
+      saveLastProjectUrl(projectHomeUrl(scope.org, scope.project));
+    }
+  }, [scope]);
 
   // Find component UUID for permission checks
   const currentComponent = hasComponent(scope) ? components.find((c) => c.handler === scope.component) : undefined;
@@ -763,12 +771,10 @@ export default function AppLayout(): JSX.Element {
             <Button onClick={() => setConfirmDialogOpen(false)}>Cancel</Button>
             <Button
               variant="contained"
-              onClick={async () => {
-                try {
-                  await signOut();
-                } catch { /* ignore revoke errors — tokens are cleared regardless */ }
+              onClick={() => {
+                clearSession();
                 setConfirmDialogOpen(false);
-                navigate(loginUrl());
+                window.location.href = loginUrl();
               }}>
               Sign Out
             </Button>
