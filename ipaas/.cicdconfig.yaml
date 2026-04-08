@@ -1,0 +1,9 @@
+# The ECR registry where the pipeline will push the built container image
+# this should match what is defined in workload.yaml in the relevant branch of
+# wso2cloud-deployment Github repository
+ecrRepository: "259428491004.dkr.ecr.us-east-2.amazonaws.com/devant/ipaas-console"
+
+# The exact paths in THIS GitOps repository that need to be updated with the new image tag
+workloadPaths:
+  - wso2cloud-controlplane/domains/developers/namespaces/wso2cloud/projects/devant/components/ipaas-console/workload.yaml
+buildType: docker
