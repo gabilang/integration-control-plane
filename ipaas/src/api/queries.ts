@@ -652,18 +652,6 @@ export interface GqlCommit {
   };
 }
 
-const COMPONENT_REPOSITORY_QUERY = `
-  query GetComponentRepository($projectId: String!, $componentHandler: String!) {
-    component(projectId: $projectId, componentHandler: $componentHandler) {
-      repository {
-        gitProvider, organizationApp, nameApp, branch, appSubPath,
-        bitbucketServerUrl, serverUrl, projectApp,
-        isBuildConfigurationMigrated,
-        buildpackConfig { versionId, buildContext, isUnitTestEnabled, languageVersion, pullLatestSubmodules, enableTrivyScan, keyValues { id, key, value } }
-      }
-    }
-  }`;
-
 export function useComponentRepository(projectId: string, componentHandler: string) {
   return useQuery({
     queryKey: ['componentRepository', projectId, componentHandler],
@@ -749,13 +737,6 @@ export interface GqlDeploymentStatus {
   tasks?: BffWorkflowTask[];
 }
 
-const DEPLOYMENT_STATUS_QUERY = `
-  query GetDeploymentStatus($versionId: String!, $componentId: String!) {
-    deploymentStatusByVersion(versionId: $versionId, componentId: $componentId) {
-      id, sha, started_at, completed_at, status, conclusion, conclusionV2, isAutoDeploy, isTriggeredAtCreation, name, failureReason, sourceCommitId, buildRef
-    }
-  }`;
-
 export function useDeploymentStatus(componentId: string, versionId: string) {
   return useQuery({
     queryKey: ['deploymentStatus', componentId, versionId],
@@ -818,7 +799,7 @@ function mapWorkflowRunToBuildInfo(run: BffWorkflowRun): GqlDeploymentStatus {
   }
 
   return {
-    id: 0,
+    id: parseInt(run.name.split('-').pop() ?? '0', 10) || 0,
     sha: run.commit,
     started_at: run.startedAt,
     completed_at: run.completedAt,
@@ -826,6 +807,7 @@ function mapWorkflowRunToBuildInfo(run: BffWorkflowRun): GqlDeploymentStatus {
     conclusion,
     conclusionV2: conclusion,
     isAutoDeploy: false,
+    isTriggeredAtCreation: false,
     name: run.name,
     failureReason: 0,
     sourceCommitId: run.commit,

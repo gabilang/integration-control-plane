@@ -18,11 +18,12 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { authenticatedFetch, refreshAccessToken } from '../auth/tokenManager';
-import type { GqlArtifact, GqlComponent, GqlEnvironment } from './queries';
+import type { GqlArtifact, BffWorkflowRun } from './queries';
 import { icpClient } from './client';
 import { mapComponent, mapEnvironment, mapProject, type BffComponent, type BffEnvironment, type BffExecution, type BffProject, type BffSchedule, type SchemaConfigItem } from './queries';
 import { toBackendArtifactType } from './artifactToggleMutations';
-import type { DeployComponentInput, UpdateBuildpackConfigsInput } from '../types/build';
+import { gql } from './graphql';
+import type { UpdateBuildpackConfigsInput } from '../types/build';
 
 export interface CreateProjectInput {
   name: string;
@@ -351,57 +352,24 @@ export function useDeployDeploymentTrack() {
   });
 }
 
-// ── Build trigger (deploy component) ──
+// ── Build trigger ──
 
-const DEPLOY_COMPONENT = `
-  mutation DeployComponent(
-    $componentId: String!
-    $versionId: String!
-    $envId: String!
-    $sha: String!
-    $branch: String
-    $shaDate: String
-    $gitRefType: String
-    $cron: String
-    $cronTimezone: String
-    $commitTag: String
-  ) {
-    deployComponent(deployment: {
-      componentId: $componentId,
-      versionId: $versionId,
-      envId: $envId,
-      sha: $sha,
-      branch: $branch,
-      shaDate: $shaDate,
-      gitRefType: $gitRefType,
-      cron: $cron,
-      cronTimezone: $cronTimezone,
-      commitTag: $commitTag
-    }) {
-      message
-      success
-    }
-  }`;
+export interface TriggerBuildInput {
+  componentName: string;
+  projectName: string;
+}
 
 export function useTriggerBuild() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: DeployComponentInput) =>
-      gql<{ deployComponent: { message: string; success: boolean } }>(DEPLOY_COMPONENT, {
-        componentId: input.componentId,
-        versionId: input.versionId,
-        envId: input.envId,
-        sha: input.sha,
-        branch: input.branch,
-        shaDate: input.shaDate ?? '',
-        gitRefType: input.gitRefType,
-        cron: input.cron ?? null,
-        cronTimezone: input.cronTimezone ?? '',
-        commitTag: input.commitTag ?? null,
-      }).then((d) => d.deployComponent),
+    mutationFn: (input: TriggerBuildInput) =>
+      icpClient.post<BffWorkflowRun>(
+        `/components/${encodeURIComponent(input.componentName)}/builds`,
+        {},
+        { projectName: input.projectName },
+      ),
     onSuccess: (_data, input) => {
-      // Immediately refresh build history after a build is triggered
-      qc.invalidateQueries({ queryKey: ['deploymentStatus', input.componentId, input.versionId] });
+      qc.invalidateQueries({ queryKey: ['builds', input.componentName, input.projectName] });
     },
   });
 }

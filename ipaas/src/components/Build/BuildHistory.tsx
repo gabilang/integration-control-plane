@@ -31,8 +31,8 @@ import BuildStatusLabel from './BuildStatusLabel';
 interface BuildHistoryProps {
   componentId: string;
   versionId: string;
-  envId: string;
-  branch: string;
+  componentName: string;
+  projectName: string;
   builds: GqlDeploymentStatus[];
   buildsLoading: boolean;
   commits: GqlCommit[];
@@ -40,7 +40,7 @@ interface BuildHistoryProps {
   repository: GqlRepository | null;
 }
 
-export default function BuildHistory({ componentId, versionId, envId, branch, builds, buildsLoading, commits, commitsLoading, repository }: BuildHistoryProps) {
+export default function BuildHistory({ componentId, versionId, componentName, projectName, builds, buildsLoading, commits, commitsLoading, repository }: BuildHistoryProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerType, setDrawerType] = useState<BuildDrawerType | null>(null);
   const [selectedBuild, setSelectedBuild] = useState<GqlDeploymentStatus | null>(null);
@@ -82,10 +82,9 @@ export default function BuildHistory({ componentId, versionId, envId, branch, bu
   const isBuilding = triggerBuild.isPending || hasInProgress || justTriggered;
 
   const handleBuildLatest = () => {
-    if (!latestCommit || !envId) return;
     setJustTriggered(true);
     triggerBuild.mutate(
-      { componentId, versionId, envId, sha: latestCommit.sha, branch, shaDate: latestCommit.author?.date ?? '', gitRefType: 'commit' },
+      { componentName, projectName },
       { onError: () => setJustTriggered(false) },
     );
   };
@@ -109,11 +108,10 @@ export default function BuildHistory({ componentId, versionId, envId, branch, bu
     setDrawerOpen(true);
   };
 
-  const handleCommitBuild = (commit: GqlCommit) => {
-    if (!envId) return;
+  const handleCommitBuild = (_commit: GqlCommit) => {
     setJustTriggered(true);
     triggerBuild.mutate(
-      { componentId, versionId, envId, sha: commit.sha, branch, shaDate: commit.author?.date ?? '', gitRefType: 'commit' },
+      { componentName, projectName },
       { onError: () => setJustTriggered(false) },
     );
   };

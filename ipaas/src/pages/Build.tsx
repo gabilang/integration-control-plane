@@ -18,7 +18,7 @@
 
 import { CircularProgress, PageContent, Typography } from '@wso2/oxygen-ui';
 import type { JSX } from 'react';
-import { useComponentByHandler, useCommitHistory, useDeploymentStatus, useEnvironments, useOrgs, useProject, useProjectByHandler, useComponentRepository } from '../api/queries';
+import { useBuilds, useComponentByHandler, useCommitHistory, useProject, useProjectByHandler, useComponentRepository } from '../api/queries';
 import BuildHistory from '../components/Build/BuildHistory';
 import type { ComponentScope } from '../nav';
 
@@ -31,6 +31,7 @@ export default function Build(scope: ComponentScope): JSX.Element {
   const { data: projectByUuid } = useProject(isProjectUuid ? scope.project : '');
   const project = isProjectUuid ? projectByUuid : projectByHandler;
   const projectId = isProjectUuid ? scope.project : (project?.id ?? '');
+  const projectName = !isProjectUuid ? scope.project : (project?.id ?? '');
 
   const { data: component, isLoading: loadingComponent } = useComponentByHandler(projectId, scope.component);
   const componentId = component?.id ?? '';
@@ -39,18 +40,13 @@ export default function Build(scope: ComponentScope): JSX.Element {
   const activeVersion = apiVersions.find((v) => v.latest) ?? apiVersions[0];
   const versionId = activeVersion?.id ?? '';
 
-  const { data: orgs, isLoading: loadingOrgs } = useOrgs();
-  const orgUuid = orgs?.find((o) => o.handle === scope.org)?.uuid ?? '';
-
-  const { data: environments = [], isLoading: loadingEnvironments } = useEnvironments(orgUuid, projectId);
-
   const { data: repository, isLoading: loadingRepository } = useComponentRepository(projectId, scope.component);
   const branch = repository?.branch ?? '';
 
-  const { data: builds = [], isLoading: loadingBuilds } = useDeploymentStatus(componentId, versionId);
+  const { data: builds = [], isLoading: loadingBuilds } = useBuilds(scope.component, projectName);
   const { data: commits = [], isLoading: loadingCommits } = useCommitHistory(componentId, branch);
 
-  const isLoading = (!isProjectUuid && loadingProject) || loadingComponent || loadingOrgs || loadingEnvironments || loadingRepository;
+  const isLoading = (!isProjectUuid && loadingProject) || loadingComponent || loadingRepository;
 
   if (isLoading) {
     return (
@@ -68,15 +64,13 @@ export default function Build(scope: ComponentScope): JSX.Element {
     );
   }
 
-  const envId = environments[0]?.id ?? '';
-
   return (
     <PageContent>
       <BuildHistory
         componentId={componentId}
         versionId={versionId}
-        envId={envId}
-        branch={branch}
+        componentName={scope.component}
+        projectName={projectName}
         builds={builds}
         buildsLoading={loadingBuilds}
         commits={commits}
