@@ -678,9 +678,12 @@ export function useCommitHistory(componentId: string, branch: string, projectNam
     queryKey: ['commitHistory', componentId, branch],
     queryFn: () =>
       icpClient
-        .get<{ items: GqlCommit[] }>(`/components/${encodeURIComponent(componentId)}/commit-history`, { branch, ...(projectName ? { projectName } : {}) })
+        .get<{ items: GqlCommit[] }>(`/components/${encodeURIComponent(componentId)}/commit-history`, {
+          ...(branch ? { branch } : {}),
+          ...(projectName ? { projectName } : {}),
+        })
         .then((d) => d.items ?? []),
-    enabled: !!componentId && !!branch,
+    enabled: !!componentId,
   });
 }
 
@@ -837,8 +840,7 @@ export function useBuilds(componentName: string, projectName: string) {
     queryFn: () =>
       icpClient
         .get<BffWorkflowRunList>(`/components/${encodeURIComponent(componentName)}/builds`, { projectName })
-        .then((d) => (d.items ?? []).map(mapWorkflowRunToBuildInfo))
-        .catch(() => []),
+        .then((d) => (d.items ?? []).map(mapWorkflowRunToBuildInfo)),
     enabled: !!componentName && !!projectName,
     retry: false,
     refetchInterval: 15000,

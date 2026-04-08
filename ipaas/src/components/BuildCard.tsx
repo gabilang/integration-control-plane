@@ -134,7 +134,7 @@ function buildLogText(logs: BuildRunLogs | null): string | null {
 }
 
 export default function BuildCard({ componentId, orgHandler, projectId, latestCommit }: BuildCardProps) {
-  const { data: deployments = [] } = useBuilds(componentId, projectId);
+  const { data: deployments = [], isError: buildsError } = useBuilds(componentId, projectId);
   const lastBuild = deployments[0] ?? null;
   const queryClient = useQueryClient();
   const deployComponent = useDeployComponent();
@@ -221,8 +221,8 @@ export default function BuildCard({ componentId, orgHandler, projectId, latestCo
         <Typography variant="h5" component="h2" sx={{ fontWeight: 600, textTransform: 'capitalize', mb: 1 }}>
           Latest Build
         </Typography>
-        <Typography variant="body2" color="text.secondary">
-          No builds yet.
+        <Typography variant="body2" color={buildsError ? 'error.main' : 'text.secondary'}>
+          {buildsError ? 'Failed to load build status.' : 'No builds yet.'}
         </Typography>
       </Box>
     );
