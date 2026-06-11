@@ -1,0 +1,66 @@
+name: Publish Cloud Image
+
+# Builds the cloud (OpenChoreo) variant of the ipaas console and publishes it to
+# ghcr.io on every commit to the release branch.
+#
+# Public wso2-org repos cannot use the internal `cicd` GitHub App that drives image
+# builds in private wso2-enterprise repos. Instead this relies on native GitHub
+# Actions `push` triggers, an AWS CodeBuild ephemeral runner, and the built-in
+# GITHUB_TOKEN for the ghcr.io login (the repo lives under the wso2 org, so no
+# external registry secret is required).
+
+on:
+  push:
+    branches:
+      - devant-migration
+
+run-name: Publish integration-platform-cloud (${{ github.sha }})
+
+env:
+  REGISTRY: ghcr.io
+  REGISTRY_ORG: wso2
+  IMAGE_NAME: integration-platform-cloud
+
+jobs:
+  build-and-push:
+    name: Build & Push Cloud Image
+    # AWS CodeBuild GitHub Actions runner. The `wso2_integration-control-plane`
+    # segment must match the provisioned CodeBuild project name.
+    runs-on:
+      - codebuild-wso2_integration-control-plane-${{ github.run_id }}-${{ github.run_attempt }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Compute short SHA
+        id: meta
+        run: echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      # Buildx/BuildKit is required: ipaas/Dockerfile uses `# syntax=docker/dockerfile:1.7`,
+      # `--mount=type=cache`, and heredocs.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push cloud image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./ipaas
+          file: ./ipaas/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.REGISTRY_ORG }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.REGISTRY_ORG }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

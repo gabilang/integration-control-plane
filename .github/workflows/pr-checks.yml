@@ -1,0 +1,115 @@
+name: PR Checks
+
+# Pre-merge quality gate for the ipaas console. Runs on pull requests targeting the
+# release branch so breakage is caught before it lands and triggers an image publish
+# (see cloud-image-publish.yml).
+
+on:
+  pull_request:
+    branches:
+      - devant-migration
+    paths:
+      - "ipaas/**"
+      - ".github/workflows/pr-checks.yml"
+
+defaults:
+  run:
+    working-directory: ipaas
+
+jobs:
+  lint:
+    name: Lint
+    runs-on:
+      - codebuild-wso2_integration-control-plane-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ipaas/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run ESLint
+        run: pnpm lint
+
+  format:
+    name: Format Check
+    runs-on:
+      - codebuild-wso2_integration-control-plane-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ipaas/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Prettier check
+        run: pnpm format:check
+
+  build:
+    name: Build Check
+    runs-on:
+      - codebuild-wso2_integration-control-plane-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ipaas/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # build:check runs `tsc -b` (type-checks the shared contract across all product
+      # variants) then a vite build.
+      - name: Run build check
+        run: pnpm build:check
+
+      # Buildx/BuildKit is required: ipaas/Dockerfile uses `# syntax=docker/dockerfile:1.7`,
+      # `--mount=type=cache`, and heredocs.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Verifies the cloud image (pnpm build:cloud + nginx stage) builds end-to-end.
+      # No registry push on PRs — this is a build-only smoke check.
+      - name: Build cloud image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./ipaas
+          file: ./ipaas/Dockerfile
+          push: false
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
