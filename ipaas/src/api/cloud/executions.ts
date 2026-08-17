@@ -136,11 +136,11 @@ export const fetchTaskExecutions = async (_releaseId: string, componentId = '', 
   return all;
 };
 
-export const fetchExecutionArguments = (runId: string, componentId: string, _releaseId: string): Promise<ExecutionArgument[]> =>
-  bff
-    .get<ExecutionArgument[]>(`/components/${seg(componentId)}/executions/${seg(runId)}/arguments`)
-    .then((r) => r ?? [])
-    .catch(() => []);
+// Per-run arguments came from an ICP GraphQL query behind
+// GET /components/{name}/executions/{runId}/arguments, which has been removed from
+// the BFF. That call already failed into an empty list on this stack, so the
+// Arguments tab renders exactly as before — empty, without an error.
+export const fetchExecutionArguments = (_runId: string, _componentId: string, _releaseId: string): Promise<ExecutionArgument[]> => Promise.resolve([]);
 
 // awaits: BFF execution-log plumbing (pod logs via resource-tree).
 export const fetchExecutionLogs = (_componentId: string, _deploymentTrackId: string, _executionId: string, _environmentId: string): Promise<ExecutionLogEntry[]> => Promise.resolve([]);
@@ -158,7 +158,10 @@ export const fetchTaskExecutionCount = (releaseId: string, componentId = '', env
     .then((items) => items.length)
     .catch(() => null);
 
-export const updateJobConfigs = (input: UpdateJobConfigsInput): Promise<boolean> => bff.put<{ success?: boolean }>(`/components/${seg(input.componentId)}/job-configs`, input).then((r) => r?.success ?? true);
+// Job configs were written through an ICP GraphQL mutation (PUT /job-configs),
+// now removed. Schedule changes on this stack go through the schedule endpoints
+// that fetchExecutionConfigs reads.
+export const updateJobConfigs = (_input: UpdateJobConfigsInput): Promise<boolean> => ni('updateJobConfigs');
 
 // MI artifact trigger — no API Manager / MI runtime on the OpenChoreo stack.
 export const triggerTask = (_input: TriggerTaskInput): Promise<{ status: string; message: string; successCount: number; failedCount: number; details: string[] }> =>
