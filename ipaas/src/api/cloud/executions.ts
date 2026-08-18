@@ -26,7 +26,7 @@
  * resource-tree is not wired yet), and triggerTask (MI) is unsupported.
  */
 
-import { bff, q, seg } from './_client';
+import { bff, items, q, seg, type ListResponse } from './_client';
 import type { ExecutionConfigs, TaskExecution, ExecutionLogEntry, UpdateJobConfigsInput, TriggerComponentInput, TriggerRunResult, RuntimeArgument } from '../../types/executions';
 import type { TriggerTaskInput } from '../../types/artifact';
 
@@ -136,11 +136,19 @@ export const fetchTaskExecutions = async (_releaseId: string, componentId = '', 
   return all;
 };
 
-// Per-run arguments came from an ICP GraphQL query behind
-// GET /components/{name}/executions/{runId}/arguments, which has been removed from
-// the BFF. That call already failed into an empty list on this stack, so the
-// Arguments tab renders exactly as before — empty, without an error.
-export const fetchExecutionArguments = (_runId: string, _componentId: string, _releaseId: string): Promise<ExecutionArgument[]> => Promise.resolve([]);
+// GET /components/{name}/executions/{runId}/arguments?releaseId= — the arguments a
+// run was triggered with, read off the Job that ran it. releaseId identifies the
+// environment; the BFF resolves it.
+//
+// Coverage is partial by design: history is reconstructed from Observer events
+// (~30 days) while the Job is garbage-collected once it falls outside the CronJob's
+// history limits, so older runs legitimately return nothing. Kubernetes args are
+// positional, so argumentName is always empty — consumers must read argumentValue.
+export const fetchExecutionArguments = (runId: string, componentId: string, releaseId: string): Promise<ExecutionArgument[]> =>
+  bff
+    .get<ListResponse<ExecutionArgument>>(`/components/${seg(componentId)}/executions/${seg(runId)}/arguments${q({ releaseId })}`)
+    .then(items)
+    .catch(() => []);
 
 // awaits: BFF execution-log plumbing (pod logs via resource-tree).
 export const fetchExecutionLogs = (_componentId: string, _deploymentTrackId: string, _executionId: string, _environmentId: string): Promise<ExecutionLogEntry[]> => Promise.resolve([]);
@@ -158,10 +166,41 @@ export const fetchTaskExecutionCount = (releaseId: string, componentId = '', env
     .then((items) => items.length)
     .catch(() => null);
 
-// Job configs were written through an ICP GraphQL mutation (PUT /job-configs),
-// now removed. Schedule changes on this stack go through the schedule endpoints
-// that fetchExecutionConfigs reads.
-export const updateJobConfigs = (_input: UpdateJobConfigsInput): Promise<boolean> => ni('updateJobConfigs');
+// POST /components/{name}/schedules — the write side of fetchExecutionConfigs,
+// upserting the ReleaseBinding's CronJob spec.
+//
+// UpsertSchedule is a full replace, not a patch: the BFF only carries releaseName
+// over from the existing binding, so any field omitted here is cleared or
+// defaulted server-side. `state` is the dangerous one — it defaults to "Active",
+// which would silently restart a stopped schedule — and `cronExpression` is
+// rejected when empty. So read the current binding and merge onto it rather than
+// sending the caller's fields alone. The component-wide limits are exempt: the BFF
+// patches those only when present, so omitting them leaves them untouched.
+//
+// jobTimeoutSeconds and jobRetryCount land on the Component's parameters, so they apply to every
+// environment rather than the one release. And cronJobAllowConcurrency is dropped:
+// OpenChoreo exposes no concurrencyPolicy on the release binding, so there is
+// nowhere to put it.
+export const updateJobConfigs = async (input: UpdateJobConfigsInput): Promise<boolean> => {
+  const path = `/components/${seg(input.componentId)}/schedules`;
+  const existing = await bff.get<BffSchedule>(`${path}/${seg(input.environmentId)}`).catch(() => null);
+
+  const cronExpression = input.cronFrequency ?? existing?.cronExpression ?? '';
+  if (!cronExpression) {
+    // The endpoint 400s on an empty cron; fail here with a message naming the cause.
+    throw new Error('[cloud] executions.updateJobConfigs: a cron expression is required (none given, and the component has no schedule yet)');
+  }
+
+  await bff.post(path, {
+    environment: input.environmentId,
+    cronExpression,
+    ...((input.cronTimezone ?? existing?.cronTimezone) && { cronTimezone: input.cronTimezone ?? existing?.cronTimezone }),
+    ...(existing?.state && { state: existing.state }),
+    ...(input.jobTimeoutSeconds !== undefined && { activeDeadlineSeconds: input.jobTimeoutSeconds }),
+    ...(input.jobRetryCount !== undefined && { backoffLimit: input.jobRetryCount }),
+  });
+  return true;
+};
 
 // MI artifact trigger — no API Manager / MI runtime on the OpenChoreo stack.
 export const triggerTask = (_input: TriggerTaskInput): Promise<{ status: string; message: string; successCount: number; failedCount: number; details: string[] }> =>
