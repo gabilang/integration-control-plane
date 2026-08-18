@@ -26,7 +26,7 @@
  * resource-tree is not wired yet), and triggerTask (MI) is unsupported.
  */
 
-import { bff, items, q, seg, type ListResponse } from './_client';
+import { bff, BffError, items, q, seg, type ListResponse } from './_client';
 import type { ExecutionConfigs, TaskExecution, ExecutionLogEntry, UpdateJobConfigsInput, TriggerComponentInput, TriggerRunResult, RuntimeArgument } from '../../types/executions';
 import type { TriggerTaskInput } from '../../types/artifact';
 
@@ -183,7 +183,14 @@ export const fetchTaskExecutionCount = (releaseId: string, componentId = '', env
 // nowhere to put it.
 export const updateJobConfigs = async (input: UpdateJobConfigsInput): Promise<boolean> => {
   const path = `/components/${seg(input.componentId)}/schedules`;
-  const existing = await bff.get<BffSchedule>(`${path}/${seg(input.environmentId)}`).catch(() => null);
+  // Only a genuinely absent schedule may be read as "nothing to preserve". Any other
+  // failure — expired token, upstream 5xx, network — must not fall through to the
+  // full-replace POST, which would drop state and cronTimezone and so restart a
+  // stopped schedule: exactly what reading first is meant to prevent.
+  const existing = await bff.get<BffSchedule>(`${path}/${seg(input.environmentId)}`).catch((err: unknown) => {
+    if (err instanceof BffError && err.status === 404) return null;
+    throw err;
+  });
 
   const cronExpression = input.cronFrequency ?? existing?.cronExpression ?? '';
   if (!cronExpression) {
