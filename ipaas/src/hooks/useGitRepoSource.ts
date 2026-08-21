@@ -137,6 +137,16 @@ export function useGitRepoSource(credentialsEnabled: boolean) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repoUrl]);
 
+  // The tree rooted at subPath. Workspace detection and the module picker must
+  // read the same nodes: detecting on the subtree while listing modules from the
+  // repo root yields module paths that don't belong to the detected workspace.
+  const scopedContents = useMemo(() => {
+    if (!subPath || subPath === '/') return repoContents;
+    const cleanPath = subPath.replace(/^\//, '');
+    const target = repoContents.find((n) => n.path === cleanPath || n.subPath === cleanPath);
+    return target?.children ?? [];
+  }, [repoContents, subPath]);
+
   // Workspace detection from repo contents
   useEffect(() => {
     if (!pathReady || isContentsLoading) {
@@ -144,16 +154,10 @@ export function useGitRepoSource(credentialsEnabled: boolean) {
       setWorkspaceModules([]);
       return;
     }
-    let nodes = repoContents;
-    if (subPath && subPath !== '/') {
-      const cleanPath = subPath.replace(/^\//, '');
-      const target = repoContents.find((n) => n.path === cleanPath || n.subPath === cleanPath);
-      nodes = target?.children ?? [];
-    }
-    const workspace = isBallerinaWorkspace(nodes);
+    const workspace = isBallerinaWorkspace(scopedContents);
     setIsWorkspace(workspace);
     if (!workspace) setWorkspaceModules([]);
-  }, [repoContents, subPath, pathReady, isContentsLoading]);
+  }, [scopedContents, pathReady, isContentsLoading]);
 
   const resetPickers = () => {
     setSelectedOrg('');
@@ -245,6 +249,7 @@ export function useGitRepoSource(credentialsEnabled: boolean) {
     branches,
     isBranchesLoading,
     repoContents,
+    scopedContents,
     isContentsLoading,
     isContentsError,
     refetchContents,

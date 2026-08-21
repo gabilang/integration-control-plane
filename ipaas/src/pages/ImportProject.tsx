@@ -24,6 +24,8 @@ import GitHubAuthArea from '../components/Import/GitHubAuthArea';
 import { useState, useLayoutEffect, type JSX } from 'react';
 import { useAppNavigate } from '../hooks/useAppNavigate';
 import { useCreateMonoRepoProject } from '../hooks/useProjects';
+import { resolveComponentSubType, resolveDisplayType } from '../utils/integrationType';
+import { IS_CLOUD } from '../features';
 import { useCreateComponent } from '../hooks/useComponents';
 import { useOrgs, useOrgComponentLimits, useOrgSubscriptions } from '../hooks/useOrg';
 import type { Project } from '../types/project';
@@ -42,6 +44,9 @@ import { gitProviderIcon } from '../constants/gitProviders';
 import { buildRepoUrl } from '../utils/gitProviderUrl';
 import { GitProvider as CredGitProvider } from '../types/credentials';
 import { useGitRepoSource } from '../hooks/useGitRepoSource';
+
+// Each module create fans out to several upstream calls plus a build trigger.
+const IMPORT_CONCURRENCY = 3;
 
 export default function ImportProject(scope: OrgScope): JSX.Element {
   const navigate = useAppNavigate();
@@ -91,6 +96,7 @@ export default function ImportProject(scope: OrgScope): JSX.Element {
     branches,
     isBranchesLoading,
     repoContents,
+    scopedContents,
     isContentsLoading,
     isContentsError,
     refetchContents,
@@ -166,27 +172,50 @@ export default function ImportProject(scope: OrgScope): JSX.Element {
       return;
     }
 
-    // Step 2: create workspace module components. The project already exists, so individual
-    // component failures don't block navigation — the user can manage them from the project page.
+    // Step 2: create one component per workspace module. The project already exists
+    // by now, so a failure here cannot be rolled back — report which modules failed
+    // and keep the user on the page rather than navigating away from a partial import.
     if (workspaceModules.length > 0) {
       const srcGitRepoUrl = buildRepoUrl(credProvider ?? CredGitProvider.GITHUB, activeOrg, activeRepo, selectedCredential?.serverUrl);
-      await Promise.allSettled(
-        workspaceModules.map((module) =>
-          createComponent.mutateAsync({
-            displayName: module.displayName || module.name,
-            name: toHandler(module.displayName || module.name),
-            description: '',
-            orgHandler: scope.org,
-            projectId: project.id,
-            displayType: module.integrationType === 'automation' ? 'scheduledTask' : 'ballerinaService',
-            srcGitRepoUrl,
-            repositoryBranch: selectedBranch,
-            repositorySubPath: module.path,
-            isPublicRepo,
-            ...(isCredentialMode ? { secretRef } : {}),
-          }),
-        ),
-      );
+      // Private repos clone through the GitHub App installation that grants access;
+      // without it the component is created with no source binding and every build fails.
+      const installationId = !isPublicRepo && !isCredentialMode && IS_CLOUD ? userRepos?.find((o) => o.orgName === activeOrg)?.installationId : undefined;
+
+      const failures: string[] = [];
+      // Each create fans out to several upstream calls and a build trigger, and the
+      // request layer has no backoff, so a wide workspace is imported in batches
+      // rather than all at once.
+      for (let i = 0; i < workspaceModules.length; i += IMPORT_CONCURRENCY) {
+        const batch = workspaceModules.slice(i, i + IMPORT_CONCURRENCY);
+        const results = await Promise.allSettled(
+          batch.map((module) =>
+            createComponent.mutateAsync({
+              displayName: module.displayName || module.name,
+              name: toHandler(module.displayName || module.name),
+              description: '',
+              orgHandler: scope.org,
+              projectId: project.id,
+              displayType: resolveDisplayType('BI', module.integrationType),
+              componentSubType: resolveComponentSubType('BI', module.integrationType),
+              srcGitRepoUrl,
+              repositoryBranch: selectedBranch,
+              repositorySubPath: module.path,
+              isPublicRepo,
+              ...(isCredentialMode ? { secretRef } : {}),
+              ...(installationId ? { gitHubAppInstallationId: installationId } : {}),
+            }),
+          ),
+        );
+        results.forEach((result, idx) => {
+          if (result.status === 'rejected') failures.push(batch[idx].displayName || batch[idx].name);
+        });
+      }
+
+      if (failures.length > 0) {
+        setSubmitError(`The project was created, but these integrations could not be imported: ${failures.join(', ')}. You can add them from the project page.`);
+        setIsImporting(false);
+        return;
+      }
     }
 
     navigate(resourceUrl(narrow(scope, project.handler), 'overview'));
@@ -488,7 +517,7 @@ export default function ImportProject(scope: OrgScope): JSX.Element {
       )}
 
       {/* Configure Integrations — shown after workspace detection */}
-      {isWorkspace && <WorkspaceModuleTable repoName={activeRepo} repoContents={repoContents} modules={workspaceModules} onChange={setWorkspaceModules} quotaRemaining={quotaRemaining} alertWhenEmpty />}
+      {isWorkspace && <WorkspaceModuleTable repoName={activeRepo} repoContents={scopedContents} modules={workspaceModules} onChange={setWorkspaceModules} quotaRemaining={quotaRemaining} alertWhenEmpty />}
 
       <Stack direction="row" gap={2} sx={{ mt: 2 }}>
         <Button variant="outlined" onClick={() => navigate(orgHomeUrl)} disabled={isImporting}>
