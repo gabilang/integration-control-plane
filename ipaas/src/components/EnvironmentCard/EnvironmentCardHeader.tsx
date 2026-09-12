@@ -166,7 +166,7 @@ export default function EnvironmentCardHeader({
         {isAutomation && (
           <>
             {nextRunLabel && (
-              <Stack direction="row" alignItems="center" gap={0.5} sx={{ mr: 0.5 }}>
+              <Stack direction="row" alignItems="center" gap={0.5} sx={{ mr: 0.5, color: 'success.main' }}>
                 <Clock size={14} />
                 <Typography variant="body2" color="text.secondary">
                   {nextRunLabel}

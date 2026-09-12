@@ -27,6 +27,7 @@ import ExecutionForm from '../components/AutomationTest/ExecutionForm';
 import ExecutionLogsPanel from '../components/AutomationTest/ExecutionLogsPanel';
 import ExecutionsDrawer from '../components/AutomationTest/ExecutionsDrawer';
 import DraftTestDialog, { type DraftDialogIntent, type DraftDialogMode } from '../components/AutomationTest/DraftTestDialog';
+import ExecutionHistoryHeader from '../components/AutomationTest/ExecutionHistoryHeader';
 import FormExecutionSummary from '../components/AutomationTest/FormExecutionSummary';
 import TestStepper from '../components/AutomationTest/TestStepper';
 import NotDeployedAlert from '../components/NotDeployedAlert';
@@ -322,6 +323,8 @@ export default function AutomationTest({ org, project, component }: ComponentSco
           {alert.message}
         </Alert>
       )}
+
+      <ExecutionHistoryHeader componentId={comp?.id ?? ''} releaseId={releaseId} environmentId={envId} />
 
       <AutomationExecutions
         releaseId={releaseId}

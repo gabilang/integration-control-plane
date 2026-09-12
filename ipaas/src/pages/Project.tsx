@@ -140,7 +140,6 @@ function EmptyProjectView({ scope, projectId }: { scope: ProjectScope; projectId
   const featuredSamples = samplesData?.featuredSamples ?? [];
   const featuredPrebuilt = (prebuiltData?.prebuiltIntegrations ?? []).slice(0, 3);
 
-  const [isCloudEditorCardHovered, setIsCloudEditorCardHovered] = useState(false);
   const [selectedTab, setSelectedTab] = useState(0);
   const [deployingSample, setDeployingSample] = useState<string | null>(null);
   const [isImportAuthenticating, setIsImportAuthenticating] = useState(false);
@@ -274,7 +273,7 @@ function EmptyProjectView({ scope, projectId }: { scope: ProjectScope; projectId
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
           <Tooltip title={creationBlocked ? blockedTooltip : ''} placement="top">
             <Box sx={creationBlocked ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}>
-              <Card sx={{ ...CARD_HOVER_SX, ...(creationBlocked ? { pointerEvents: 'none' } : {}) }} onMouseEnter={() => setIsCloudEditorCardHovered(true)} onMouseLeave={() => setIsCloudEditorCardHovered(false)} onClick={handleOpenCloudEditor}>
+              <Card sx={{ ...CARD_HOVER_SX, ...(creationBlocked ? { pointerEvents: 'none' } : {}) }} onClick={handleOpenCloudEditor}>
                 <CardContent sx={{ display: 'flex', flexDirection: 'column', p: 3, '&:last-child': { pb: 3 } }}>
                   <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 0.5 }}>
                     <Typography variant="h2">Create an Integration</Typography>
@@ -284,7 +283,7 @@ function EmptyProjectView({ scope, projectId }: { scope: ProjectScope; projectId
                     Start developing in a complete, browser-based development environment.
                   </Typography>
                   <Box sx={{ height: 260, overflow: 'hidden' }}>
-                    <IDEMockup isHovered={isCloudEditorCardHovered} onOpenClick={handleOpenCloudEditor} />
+                    <IDEMockup onOpenClick={handleOpenCloudEditor} />
                   </Box>
                 </CardContent>
               </Card>

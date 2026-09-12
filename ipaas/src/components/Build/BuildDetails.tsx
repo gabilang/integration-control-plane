@@ -98,13 +98,22 @@ export default function BuildDetails({ componentId, versionId, build, onLogsTogg
       {(() => {
         const hasDecodedStages = logs !== null && BUILD_STAGES.some(({ key }) => getStepStatus(logs, key as 'init' | 'build' | 'deploy') !== 'pending');
         const showSpinner = (logsLoading && !logs) || (isInProgress && !hasDecodedStages);
-        const showWarning = !showSpinner && !hasDecodedStages;
+        // A queued build has no pod yet, so there is nothing to retrieve — say that rather than warn.
+        const showQueued = !showSpinner && !hasDecodedStages && build.status === 'queued';
+        const showWarning = !showSpinner && !hasDecodedStages && !showQueued;
 
         if (showSpinner) {
           return (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 2, mt: 1 }}>
               <CircularProgress size={24} color="primary" />
             </Box>
+          );
+        }
+        if (showQueued) {
+          return (
+            <Alert severity="info" variant="outlined" sx={{ mt: 2, bgcolor: 'transparent' }}>
+              This build is queued. Logs will appear once it starts running.
+            </Alert>
           );
         }
         if (showWarning) {

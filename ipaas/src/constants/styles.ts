@@ -45,3 +45,9 @@ export const GITHUB_ICON_SX = {
 
 /** Colors a required TextField's asterisk red. */
 export const REQUIRED_FIELD_SX = { '& .MuiFormLabel-asterisk': { color: 'error.main' } } as const;
+
+/** Label sitting above a card, outside it — the option's name in the create flows. */
+export const SECTION_LABEL_SX = {
+  color: 'text.secondary',
+  fontWeight: 500,
+} as const;

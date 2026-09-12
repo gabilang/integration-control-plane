@@ -16,9 +16,9 @@
  * under the License.
  */
 
-import { Button, Stack, Typography } from '@wso2/oxygen-ui';
-import { Clock, Play } from '@wso2/oxygen-ui-icons-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Button } from '@wso2/oxygen-ui';
+import { Play } from '@wso2/oxygen-ui-icons-react';
+import { useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { useAppNavigate } from '../../../hooks/useAppNavigate';
 import { useQueryClient } from '@tanstack/react-query';
@@ -28,8 +28,8 @@ import type { EnvCardActionsProps } from '../../../types/integration';
 import { isDeploymentHealthy } from '../../../utils/deploymentStatus';
 import { IS_CLOUD } from '../../../features';
 import { hasMissingRequiredConfigs } from './configStatus';
+import NextRunLabel from '../../NextRunLabel';
 import ScheduleButton from './ScheduleButton';
-import { formatTimeUntil, nextCronRunMs } from '../../../utils/cronUtils';
 
 /**
  * Automation's right-header slot. Test only leaves the card when the task takes runtime arguments.
@@ -64,19 +64,6 @@ export default function EnvCardActions({
   // A stopped schedule leaves the CronJob deployed, so this only excludes a stopped deployment.
   const canTest = isDeploymentHealthy(deploymentStatusV2);
 
-  // Countdown only: the cron says when a run is due, not that it fired, so predicting one strands an in-progress row.
-  const [nextRunLabel, setNextRunLabel] = useState<string | null>(null);
-  const cronFreq = scheduleConfig?.cronjobFrequency ?? null;
-  const cronTimezone = scheduleConfig?.cronjobTimezone ?? '';
-  const updateNextRun = useCallback(() => {
-    const ms = cronFreq ? nextCronRunMs(cronFreq, cronTimezone || undefined) : null;
-    setNextRunLabel(ms === null ? null : `Next run in ${formatTimeUntil(ms)}`);
-  }, [cronFreq, cronTimezone]);
-  useEffect(() => {
-    updateNextRun();
-    const timer = setInterval(updateNextRun, 1000);
-    return () => clearInterval(timer);
-  }, [updateNextRun]);
 
   // Cloud has no runtime-arguments endpoint, so the query stays disabled rather than always failing.
   const { data: runtimeArgs, isLoading: runtimeArgsLoading } = useRuntimeArguments(component.id, versionId, deployedCommitSha ?? '', !IS_CLOUD);
@@ -106,14 +93,7 @@ export default function EnvCardActions({
 
   return (
     <>
-      {nextRunLabel && (
-        <Stack direction="row" alignItems="center" gap={0.5} sx={{ mr: 0.5 }}>
-          <Clock size={14} />
-          <Typography variant="body2" color="text.secondary">
-            {nextRunLabel}
-          </Typography>
-        </Stack>
-      )}
+      <NextRunLabel cron={scheduleConfig?.cronjobFrequency ?? ''} timeZone={scheduleConfig?.cronjobTimezone ?? ''} sx={{ mr: 0.5 }} />
       <ScheduleButton
         envId={env.id}
         envName={env.name}

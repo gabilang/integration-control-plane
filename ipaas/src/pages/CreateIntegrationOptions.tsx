@@ -16,7 +16,7 @@
  * under the License.
  */
 
-import { Alert, Box, Button, Card, CardContent, Chip, CircularProgress, IconButton, PageContent, Stack, Tooltip, Typography } from '@wso2/oxygen-ui';
+import { Alert, Box, Button, Card, CardContent, CircularProgress, IconButton, PageContent, Stack, Tooltip, Typography } from '@wso2/oxygen-ui';
 import { ArrowLeft, ArrowRight, GitHub, Plus, GitBranch } from '@wso2/oxygen-ui-icons-react';
 import { useState, type JSX } from 'react';
 import { useAppNavigate } from '../hooks/useAppNavigate';
@@ -40,7 +40,7 @@ import AzureDevOpsIcon from '../assets/icons/AzureDevOpsIcon';
 import { GitProvider } from '../types/credentials';
 import { componentSubTypeFromSample, displayTypeFromSample } from '../constants/integrations';
 import { GITHUB_AUTH } from '../constants/github';
-import { CARD_HOVER_SX, PROVIDER_ICON_SX, GITHUB_ICON_SX } from '../constants/styles';
+import { PROVIDER_ICON_SX, GITHUB_ICON_SX, SECTION_LABEL_SX } from '../constants/styles';
 import { resourceUrl, narrow, type ProjectScope } from '../nav';
 import { importComponentUrl, browseSamplesUrl, prebuiltIntegrationsUrl, componentsNewAiBuilderUrl, buildGitHubOAuthUrl } from '../paths';
 import type { Sample } from '../types/samples';
@@ -65,7 +65,6 @@ export default function CreateIntegrationOptions(scope: ProjectScope): JSX.Eleme
 
   const { data: sampleImages } = useChoreoSampleImages(orgUuid, projectId);
 
-  const [isCloudEditorCardHovered, setIsCloudEditorCardHovered] = useState(false);
   const [selectedTab, setSelectedTab] = useState(0);
   const [deployingSample, setDeployingSample] = useState<string | null>(null);
   const [isImportAuthenticating, setIsImportAuthenticating] = useState(false);
@@ -186,7 +185,7 @@ export default function CreateIntegrationOptions(scope: ProjectScope): JSX.Eleme
       )}
 
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h1">{aiBuilderEnabled ? 'How would you like to create your integration?' : 'Create an Integration'}</Typography>
+        <Typography variant="h1">How would you like to create your integration?</Typography>
       </Box>
 
       <Box
@@ -214,19 +213,16 @@ export default function CreateIntegrationOptions(scope: ProjectScope): JSX.Eleme
             </Box>
           ) : (
             /* Cloud Editor card */
-            <Box sx={{ flex: 7 }}>
-              <Card sx={{ height: '100%', ...CARD_HOVER_SX }} onMouseEnter={() => setIsCloudEditorCardHovered(true)} onMouseLeave={() => setIsCloudEditorCardHovered(false)} onClick={handleOpenCloudEditor}>
+            <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+              <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 1.5 }}>
+                <Typography variant="body2" sx={SECTION_LABEL_SX}>
+                  Create on Cloud
+                </Typography>
+              </Stack>
+              <Card variant="outlined" sx={{ flex: 1, boxShadow: 'none', borderColor: 'primary.main' }}>
                 <CardContent sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 3, '&:last-child': { pb: 3 } }}>
-                  <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 0.5 }}>
-                    <Typography variant="h2">Create an Integration</Typography>
-                    <Chip label="Beta" size="small" color="primary" variant="outlined" />
-                  </Stack>
-                  <Typography color="text.secondary" variant="body2" sx={{ mb: 2 }}>
-                    Start developing in a complete, browser-based development environment.
-                  </Typography>
-                  {/* Fixed height for IDE mockup */}
-                  <Box sx={{ height: 260, overflow: 'hidden' }}>
-                    <IDEMockup isHovered={isCloudEditorCardHovered} onOpenClick={handleOpenCloudEditor} />
+                  <Box sx={{ flex: 1, minHeight: 260, overflow: 'hidden' }}>
+                    <IDEMockup onOpenClick={handleOpenCloudEditor} />
                   </Box>
                 </CardContent>
               </Card>
@@ -234,21 +230,25 @@ export default function CreateIntegrationOptions(scope: ProjectScope): JSX.Eleme
           )}
 
           {/* Import Integration card */}
-          <Box sx={{ flex: aiBuilderEnabled ? '0 0 auto' : 3 }}>
-            {aiBuilderEnabled && (
-              <Typography variant="body2" sx={{ mb: 2.5, color: 'text.secondary', fontWeight: 500, mt: aiBuilderEnabled ? 1 : 0 }}>
+          <Box sx={{ flex: '0 0 auto' }}>
+            {aiBuilderEnabled ? (
+              <Typography variant="body2" sx={{ mb: 2.5, color: 'text.secondary', fontWeight: 500, mt: 1 }}>
                 Create it yourself
               </Typography>
+            ) : (
+              <Typography variant="body2" sx={{ ...SECTION_LABEL_SX, mb: 1.5 }}>
+                Import your own
+              </Typography>
             )}
-            <Card variant="outlined" sx={{ height: aiBuilderEnabled ? 'auto' : '100%', boxShadow: 'none', ...(isImportAuthenticating ? { pointerEvents: 'none', opacity: 0.7 } : {}) }}>
+            <Card variant="outlined" sx={{ boxShadow: 'none', ...(isImportAuthenticating ? { pointerEvents: 'none', opacity: 0.7 } : {}) }}>
               <CardContent
                 sx={{
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
-                  p: 2.5,
+                  justifyContent: aiBuilderEnabled ? 'space-between' : 'flex-start',
+                  p: aiBuilderEnabled ? 2.5 : 1.5,
                   gap: 3,
-                  '&:last-child': { pb: 2.5 },
+                  '&:last-child': { pb: aiBuilderEnabled ? 2.5 : 1.5 },
                 }}>
                 {aiBuilderEnabled ? (
                   <>
@@ -269,23 +269,16 @@ export default function CreateIntegrationOptions(scope: ProjectScope): JSX.Eleme
                     </Box>
                   </>
                 ) : (
-                  <>
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography variant="h2" sx={{ mb: 0.5 }}>
-                        Import an Integration
-                      </Typography>
-                      <Typography color="text.secondary" variant="body2">
-                        {isImportAuthenticating ? 'Completing GitHub authorization…' : 'Connect your repository and start building instantly'}
-                      </Typography>
-                    </Box>
-
-                    {/* Vertical divider */}
-                    <Box sx={{ width: '2px', alignSelf: 'stretch', bgcolor: 'divider', flexShrink: 0 }} />
-                  </>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mr: 2, ml: 2, flexShrink: 0 }}>
+                    <GitBranch size={18} />
+                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                      Import a repository from
+                    </Typography>
+                  </Box>
                 )}
 
                 {/* Provider icon buttons */}
-                <Box sx={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: aiBuilderEnabled ? 2 : 3 }}>
+                <Box sx={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: aiBuilderEnabled ? 2 : 4 }}>
                   {isImportAuthenticating ? (
                     <CircularProgress size={22} />
                   ) : (
@@ -331,11 +324,9 @@ export default function CreateIntegrationOptions(scope: ProjectScope): JSX.Eleme
 
         {/* Right column: Get Started Quickly */}
         <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-          {aiBuilderEnabled && (
-            <Typography variant="body2" sx={{ mb: 1, color: 'text.secondary', fontWeight: 500 }}>
-              Start quickly
-            </Typography>
-          )}
+          <Typography variant="body2" sx={{ ...SECTION_LABEL_SX, mb: aiBuilderEnabled ? 1 : 1.5 }}>
+            Start quickly
+          </Typography>
           <Card
             variant="outlined"
             sx={{
@@ -346,17 +337,6 @@ export default function CreateIntegrationOptions(scope: ProjectScope): JSX.Eleme
               mt: aiBuilderEnabled ? 1.5 : 0,
             }}>
             <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column', p: 3, '&:last-child': { pb: 3 } }}>
-              {!aiBuilderEnabled && (
-                <>
-                  <Typography variant="h2" sx={{ mb: 0.5 }}>
-                    Get Started Quickly
-                  </Typography>
-                  <Typography color="text.secondary" variant="body2" sx={{ mb: 2 }}>
-                    Start with prebuilt integrations or simple samples to get started.
-                  </Typography>
-                </>
-              )}
-
               <Box sx={{ mb: 2 }}>
                 <PillTabs value={selectedTab} onChange={setSelectedTab} tabs={[{ label: 'Prebuilt Integrations' }, { label: 'Samples' }]} />
               </Box>
