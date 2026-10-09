@@ -38,8 +38,7 @@ export interface SettingsSectionDef {
 export const SETTINGS_SECTIONS: readonly SettingsSectionDef[] = IS_CLOUD
   ? [
       // Cloud supports neither the user-management nor the security sections yet, so
-      // Settings carries only the org identity block and the package registries.
-      { id: 'org-details', label: 'Org Details', path: 'org-details', permissions: [] },
+      // Settings carries only the package registries.
       { id: 'package-registries', label: 'Package Registries', path: 'package-registries', permissions: [Permissions.ENVIRONMENT_MANAGE] },
     ]
   : [

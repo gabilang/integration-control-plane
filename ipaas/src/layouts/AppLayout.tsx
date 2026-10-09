@@ -53,34 +53,35 @@ import NotFound from '../components/NotFound';
 import {
   Activity,
   Award,
-  BarChart3,
   Bell,
   Boxes,
+  Braces,
   Brain,
+  ChartNoAxesCombined,
   ChevronDown,
   ChevronRight,
   ClipboardCheck,
   ClipboardList,
   Clock,
+  Code,
   Cog,
-  CreditCard,
   Cpu,
+  CreditCard,
   Database,
   DatabaseZap,
   Diamond,
-  Eye,
   FileText,
   FlaskConical,
-  GitBranch,
+  Gauge,
   Hammer,
   HardDrive,
   HeartPulse,
-  KeyRound,
+  FileLock,
   Layers,
   LayoutDashboard,
-  Lightbulb,
   Link2,
   LogOut,
+  Logs,
   Maximize2,
   MessageSquare,
   Network,
@@ -88,9 +89,8 @@ import {
   Puzzle,
   Recycle,
   Rocket,
-  ScanEye,
   Scale,
-  ScrollText,
+  ScanEye,
   Search,
   Server,
   Settings2,
@@ -99,9 +99,9 @@ import {
   Sparkles,
   Terminal,
   Truck,
+  Webhook,
   Workflow,
   X,
-  Webhook,
 } from '@wso2/oxygen-ui-icons-react';
 import FeaturePreviewModal from '../components/FeaturePreview/FeaturePreviewModal';
 import { useProject, useProjectByHandler, useProjects } from '../hooks/useProjects';
@@ -916,7 +916,7 @@ function AppLayoutInner(): JSX.Element {
                       {!IS_CLOUD && (
                         <Sidebar.Item id="org-develop">
                           <Sidebar.ItemIcon>
-                            <Lightbulb size={20} />
+                            <Code size={20} />
                           </Sidebar.ItemIcon>
                           <Sidebar.ItemLabel>Develop</Sidebar.ItemLabel>
                         </Sidebar.Item>
@@ -946,7 +946,7 @@ function AppLayoutInner(): JSX.Element {
                       {!IS_CLOUD && (
                         <Sidebar.Item id="org-insights">
                           <Sidebar.ItemIcon>
-                            <BarChart3 size={20} />
+                            <ChartNoAxesCombined size={20} />
                           </Sidebar.ItemIcon>
                           <Sidebar.ItemLabel>Insights</Sidebar.ItemLabel>
                           <Sidebar.Item id="org-usage">
@@ -972,18 +972,18 @@ function AppLayoutInner(): JSX.Element {
 
                       <Sidebar.Item id="org-observability">
                         <Sidebar.ItemIcon>
-                          <Eye size={20} />
+                          <Activity size={20} />
                         </Sidebar.ItemIcon>
                         <Sidebar.ItemLabel>Observe</Sidebar.ItemLabel>
                         <Sidebar.Item id="org-logs">
                           <Sidebar.ItemIcon>
-                            <ScrollText size={20} />
+                            <Logs size={20} />
                           </Sidebar.ItemIcon>
                           <Sidebar.ItemLabel>Runtime Logs</Sidebar.ItemLabel>
                         </Sidebar.Item>
                         <Sidebar.Item id="org-metrics">
                           <Sidebar.ItemIcon>
-                            <BarChart3 size={20} />
+                            <Gauge size={20} />
                           </Sidebar.ItemIcon>
                           <Sidebar.ItemLabel>Metrics</Sidebar.ItemLabel>
                         </Sidebar.Item>
@@ -1070,7 +1070,7 @@ function AppLayoutInner(): JSX.Element {
                           </Sidebar.Item>
                           <Sidebar.Item id="org-cd-pipelines">
                             <Sidebar.ItemIcon>
-                              <GitBranch size={20} />
+                              <Workflow size={20} />
                             </Sidebar.ItemIcon>
                             <Sidebar.ItemLabel>CD Pipelines</Sidebar.ItemLabel>
                           </Sidebar.Item>
@@ -1130,14 +1130,14 @@ function AppLayoutInner(): JSX.Element {
                           </Sidebar.Item>
                           <Sidebar.Item id="org-cd-pipelines">
                             <Sidebar.ItemIcon>
-                              <GitBranch size={20} />
+                              <Workflow size={20} />
                             </Sidebar.ItemIcon>
                             <Sidebar.ItemLabel>Pipelines</Sidebar.ItemLabel>
                           </Sidebar.Item>
                         </Sidebar.Item>
                       )}
 
-                      {/* Cloud has no Access Control, but Settings still carries Org Details + Package Registries. */}
+                      {/* Cloud has no Access Control, but Settings still carries Package Registries. */}
                       {IS_CLOUD && (
                         <Sidebar.Item id="org-settings">
                           <Sidebar.ItemIcon>
@@ -1173,7 +1173,7 @@ function AppLayoutInner(): JSX.Element {
                           {!IS_CLOUD && (
                             <Sidebar.Item id="develop">
                               <Sidebar.ItemIcon>
-                                <Lightbulb size={20} />
+                                <Code size={20} />
                               </Sidebar.ItemIcon>
                               <Sidebar.ItemLabel>Develop</Sidebar.ItemLabel>
                               <Sidebar.Item id="integration">
@@ -1185,7 +1185,7 @@ function AppLayoutInner(): JSX.Element {
                               {isGenericService && (
                                 <Sidebar.Item id="api-info">
                                   <Sidebar.ItemIcon>
-                                    <FileText size={20} />
+                                    <Braces size={20} />
                                   </Sidebar.ItemIcon>
                                   <Sidebar.ItemLabel>API Info</Sidebar.ItemLabel>
                                 </Sidebar.Item>
@@ -1276,7 +1276,7 @@ function AppLayoutInner(): JSX.Element {
                           {!IS_CLOUD && (
                             <Sidebar.Item id="insights">
                               <Sidebar.ItemIcon>
-                                <BarChart3 size={20} />
+                                <ChartNoAxesCombined size={20} />
                               </Sidebar.ItemIcon>
                               <Sidebar.ItemLabel>Insights</Sidebar.ItemLabel>
                               <Sidebar.Item id="usage">
@@ -1302,7 +1302,7 @@ function AppLayoutInner(): JSX.Element {
 
                           <Sidebar.Item id="observability">
                             <Sidebar.ItemIcon>
-                              <Eye size={20} />
+                              <Activity size={20} />
                             </Sidebar.ItemIcon>
                             <Sidebar.ItemLabel>Observe</Sidebar.ItemLabel>
                             {!IS_CLOUD && (
@@ -1315,13 +1315,13 @@ function AppLayoutInner(): JSX.Element {
                             )}
                             <Sidebar.Item id="logs">
                               <Sidebar.ItemIcon>
-                                <ScrollText size={20} />
+                                <Logs size={20} />
                               </Sidebar.ItemIcon>
                               <Sidebar.ItemLabel>Runtime Logs</Sidebar.ItemLabel>
                             </Sidebar.Item>
                             <Sidebar.Item id="metrics">
                               <Sidebar.ItemIcon>
-                                <BarChart3 size={20} />
+                                <Gauge size={20} />
                               </Sidebar.ItemIcon>
                               <Sidebar.ItemLabel>Metrics</Sidebar.ItemLabel>
                             </Sidebar.Item>
@@ -1348,7 +1348,7 @@ function AppLayoutInner(): JSX.Element {
                             </Sidebar.Item>
                             <Sidebar.Item id="configs-secrets">
                               <Sidebar.ItemIcon>
-                                <KeyRound size={20} />
+                                <FileLock size={20} />
                               </Sidebar.ItemIcon>
                               <Sidebar.ItemLabel>Configs &amp; Secrets</Sidebar.ItemLabel>
                             </Sidebar.Item>
@@ -1383,7 +1383,7 @@ function AppLayoutInner(): JSX.Element {
                             {IS_CLOUD && (
                               <Sidebar.Item id="proj-cd-pipelines">
                                 <Sidebar.ItemIcon>
-                                  <GitBranch size={20} />
+                                  <Workflow size={20} />
                                 </Sidebar.ItemIcon>
                                 <Sidebar.ItemLabel>Pipelines</Sidebar.ItemLabel>
                               </Sidebar.Item>
@@ -1447,7 +1447,7 @@ function AppLayoutInner(): JSX.Element {
                         {!IS_CLOUD && (
                           <Sidebar.Item id="proj-develop">
                             <Sidebar.ItemIcon>
-                              <Lightbulb size={20} />
+                              <Code size={20} />
                             </Sidebar.ItemIcon>
                             <Sidebar.ItemLabel>Develop</Sidebar.ItemLabel>
                           </Sidebar.Item>
@@ -1477,7 +1477,7 @@ function AppLayoutInner(): JSX.Element {
                         {!IS_CLOUD && (
                           <Sidebar.Item id="proj-insights">
                             <Sidebar.ItemIcon>
-                              <BarChart3 size={20} />
+                              <ChartNoAxesCombined size={20} />
                             </Sidebar.ItemIcon>
                             <Sidebar.ItemLabel>Insights</Sidebar.ItemLabel>
                             <Sidebar.Item id="proj-usage">
@@ -1503,18 +1503,18 @@ function AppLayoutInner(): JSX.Element {
 
                         <Sidebar.Item id="proj-observability">
                           <Sidebar.ItemIcon>
-                            <Eye size={20} />
+                            <Activity size={20} />
                           </Sidebar.ItemIcon>
                           <Sidebar.ItemLabel>Observe</Sidebar.ItemLabel>
                           <Sidebar.Item id="proj-logs">
                             <Sidebar.ItemIcon>
-                              <ScrollText size={20} />
+                              <Logs size={20} />
                             </Sidebar.ItemIcon>
                             <Sidebar.ItemLabel>Runtime Logs</Sidebar.ItemLabel>
                           </Sidebar.Item>
                           <Sidebar.Item id="proj-metrics">
                             <Sidebar.ItemIcon>
-                              <BarChart3 size={20} />
+                              <Gauge size={20} />
                             </Sidebar.ItemIcon>
                             <Sidebar.ItemLabel>Metrics</Sidebar.ItemLabel>
                           </Sidebar.Item>
@@ -1550,7 +1550,7 @@ function AppLayoutInner(): JSX.Element {
                             </Sidebar.Item>
                             <Sidebar.Item id="proj-cd-pipelines">
                               <Sidebar.ItemIcon>
-                                <GitBranch size={20} />
+                                <Workflow size={20} />
                               </Sidebar.ItemIcon>
                               <Sidebar.ItemLabel>CD Pipelines</Sidebar.ItemLabel>
                             </Sidebar.Item>
@@ -1584,7 +1584,7 @@ function AppLayoutInner(): JSX.Element {
                             </Sidebar.Item>
                             <Sidebar.Item id="proj-cd-pipelines">
                               <Sidebar.ItemIcon>
-                                <GitBranch size={20} />
+                                <Workflow size={20} />
                               </Sidebar.ItemIcon>
                               <Sidebar.ItemLabel>Pipelines</Sidebar.ItemLabel>
                             </Sidebar.Item>

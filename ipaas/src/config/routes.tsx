@@ -79,7 +79,6 @@ const ProjectCdPipelines = lazyPage(() => import('../pages/ProjectCdPipelines'))
 const OrgDatabases = lazyPage(() => import('../pages/OrgDatabases'));
 const OrgDataPlanes = lazyPage(() => import('../pages/OrgDataPlanes'));
 const OrgPackageRegistries = lazyPage(() => import('../pages/OrgPackageRegistries'));
-const OrgDetails = lazyPage(() => import('../pages/OrgDetails'));
 const ComponentRuntime = lazyPage(() => import('../pages/ComponentRuntime'));
 const OrgApprovals = lazyPage(() => import('../pages/OrgApprovals'));
 const CreateDatabaseServer = lazyPage(() => import('../pages/CreateDatabaseServer'));
@@ -280,12 +279,7 @@ const routes: AppRoute[] = [
                 { path: 'organizations/:orgHandler/admin/certificates/:certificateId', element: createElement(RouteErrorBoundary, null, createElement(withScope(CertificateDetail, ['organizations']))) },
               ]),
               { path: 'organizations/:orgHandler/settings', element: createElement(withScope(OrgSettings, ['organizations'])) },
-              ...(IS_CLOUD
-                ? [
-                    { path: 'organizations/:orgHandler/settings/package-registries', element: createElement(RouteErrorBoundary, null, createElement(withScope(OrgPackageRegistries, ['organizations']))) },
-                    { path: 'organizations/:orgHandler/settings/org-details', element: createElement(withScope(OrgDetails, ['organizations'])) },
-                  ]
-                : []),
+              ...(IS_CLOUD ? [{ path: 'organizations/:orgHandler/settings/package-registries', element: createElement(RouteErrorBoundary, null, createElement(withScope(OrgPackageRegistries, ['organizations']))) }] : []),
               ...hideable(IS_CLOUD, 'organizations', [
                 { path: 'organizations/:orgHandler/settings/egress-control', element: createElement(withScope(EgressControl, ['organizations'])) },
                 { path: 'organizations/:orgHandler/settings/workflows', element: createElement(withScope(Workflows, ['organizations'])) },
