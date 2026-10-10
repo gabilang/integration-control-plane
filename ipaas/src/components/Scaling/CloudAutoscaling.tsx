@@ -19,6 +19,9 @@
 import { Alert, Box, Button, CircularProgress, Collapse, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Skeleton, Stack, Typography } from '@wso2/oxygen-ui';
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { useAutoscaling, useUpdateAutoscaling } from '../../hooks/useScaling';
+import { useBillingOrg } from '../../hooks/useBillingOrg';
+import { BILLING_PRODUCT_CODE } from '../../constants/subscription';
+import { isPaidPlan } from '../../utils/billing';
 import { CLOUD_HPA_CARD, CLOUD_MEMORY_THRESHOLD, CPU_THRESHOLD, NO_AUTOSCALING_CARD, SCALE_TO_ZERO_CARD } from '../../constants/scaling';
 import ScaleMethodCard from './ScaleMethodCard';
 import RangeInput from './RangeInput';
@@ -194,6 +197,10 @@ interface CloudAutoscalingProps {
 export default function CloudAutoscaling({ projectId, componentId, environmentId, environmentName, canManage, onSaved, onError }: CloudAutoscalingProps): JSX.Element {
   const { data: autoscaling, isLoading, isError, error, refetch } = useAutoscaling(projectId, componentId, environmentId);
   const update = useUpdateAutoscaling(projectId);
+  // Autoscaling is a paid feature. The billing org is the one the app shell already loads, so this
+  // reads from the shared cache rather than asking billing again.
+  const { org: billingOrg, isLoading: loadingPlan } = useBillingOrg(BILLING_PRODUCT_CODE);
+  const paid = isPaidPlan(billingOrg);
   const [confirming, setConfirming] = useState<'enable' | 'disable' | null>(null);
   // Reports a settings change where it was made, under the threshold cards; `info` means still applying.
   const [applyStatus, setApplyStatus] = useState<{ type: 'info' | 'success' | 'error'; message: string } | null>(null);
@@ -208,7 +215,7 @@ export default function CloudAutoscaling({ projectId, componentId, environmentId
   const writing = useRef(false);
   const queued = useRef<HpaValues | null>(null);
 
-  if (isLoading) {
+  if (isLoading || loadingPlan) {
     return (
       <Stack gap={2}>
         <Skeleton variant="rounded" height={120} />
@@ -307,21 +314,35 @@ export default function CloudAutoscaling({ projectId, componentId, environmentId
 
       <Stack direction={{ xs: 'column', md: 'row' }} gap={2} sx={cardsRowSx}>
         <ScaleMethodCard title={SCALE_TO_ZERO_CARD.title} description={SCALE_TO_ZERO_CARD.description} selected={false} disabled note={NOT_AVAILABLE} onSelect={noop} />
-        <ScaleMethodCard
-          title={CLOUD_HPA_CARD.title}
-          description={CLOUD_HPA_CARD.description}
-          selected={autoscaling.enabled}
-          disabled={!canManage || (!autoscaling.enabled && !autoscaling.effective)}
-          onSelect={() => !autoscaling.enabled && setConfirming('enable')}
-        />
-        <ScaleMethodCard title={NO_AUTOSCALING_CARD.title} description={NO_AUTOSCALING_CARD.description} selected={!autoscaling.enabled} disabled={!canManage} onSelect={() => autoscaling.enabled && setConfirming('disable')} />
+        {/* Paid plans scale with HPA; free plans run at a fixed count. Until scale to zero is available
+            there is no third method, so a paid org that turns HPA on keeps it. */}
+        {paid ? (
+          <ScaleMethodCard
+            title={CLOUD_HPA_CARD.title}
+            description={CLOUD_HPA_CARD.description}
+            selected={autoscaling.enabled}
+            disabled={!canManage || (!autoscaling.enabled && !autoscaling.effective)}
+            onSelect={() => !autoscaling.enabled && setConfirming('enable')}
+          />
+        ) : (
+          <ScaleMethodCard title={NO_AUTOSCALING_CARD.title} description={NO_AUTOSCALING_CARD.description} selected={!autoscaling.enabled} disabled={!canManage} onSelect={() => autoscaling.enabled && setConfirming('disable')} />
+        )}
       </Stack>
 
       <Typography variant="subtitle1" sx={sectionTitleSx}>
         Scaling Configuration
       </Typography>
       <Stack gap={2.5} sx={sectionSx}>
-        {autoscaling.enabled ? (
+        {!paid ? (
+          autoscaling.enabled ? (
+            // A plan that lapsed leaves its autoscaling running; it can be removed, never changed.
+            <Alert severity="info">Autoscaling is available on paid plans. It is still on in {environmentName} from an earlier plan; choose No Autoscaling to turn it off.</Alert>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              This integration runs a fixed number of replicas in {environmentName}.
+            </Typography>
+          )
+        ) : autoscaling.enabled ? (
           // Not keyed on the saved values: the form already holds what it applied, and remounting on
           // each refetch would reset a slider the user is still dragging.
           <>
@@ -341,7 +362,7 @@ export default function CloudAutoscaling({ projectId, componentId, environmentId
         )}
       </Stack>
 
-      {autoscaling.enabled && <HpaAlerts autoscaling={autoscaling} />}
+      {paid && autoscaling.enabled && <HpaAlerts autoscaling={autoscaling} />}
 
       <Dialog open={confirming !== null} onClose={() => setConfirming(null)} maxWidth="xs" fullWidth>
         <DialogTitle>{confirming === 'enable' ? 'Turn on autoscaling?' : 'Turn off autoscaling?'}</DialogTitle>
