@@ -32,6 +32,7 @@ interface BffAutoscalingCondition {
   status: string;
   reason?: string;
   message?: string;
+  lastTransitionTime?: string;
 }
 
 interface BffAutoscalingStatus {
@@ -60,7 +61,7 @@ interface BffAutoscaling {
 
 const autoscalingPath = (componentId: string, env: string): string => `/components/${seg(componentId)}/environments/${seg(env)}/autoscaling`;
 
-const toCondition = (c: BffAutoscalingCondition): AutoscalingCondition => ({ type: c.type, status: c.status, reason: c.reason ?? '', message: c.message ?? '' });
+const toCondition = (c: BffAutoscalingCondition): AutoscalingCondition => ({ type: c.type, status: c.status, reason: c.reason ?? '', message: c.message ?? '', lastTransitionTime: c.lastTransitionTime });
 
 function toStatus(s: BffAutoscalingStatus): AutoscalingStatus {
   return {

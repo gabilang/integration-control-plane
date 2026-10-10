@@ -17,7 +17,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { atMaxReplicasMessage, cappedMetrics, derivePodRows } from './scaling';
+import { atMaxReplicasMessage, blockedAutoscalingMessages, cappedMetrics, derivePodRows } from './scaling';
 import type { ClusterPod, PodMetrics } from '../types/runtime';
 import type { Autoscaling, AutoscalingStatus } from '../types/scaling';
 
@@ -93,5 +93,39 @@ describe('atMaxReplicasMessage', () => {
 
   it('falls back to the bare cap while no reading can be named', () => {
     expect(atMaxReplicasMessage(capped({}))).toBe('The autoscaler needs more replicas than the maximum of 2. Raise Max replicas to allow more.');
+  });
+});
+
+describe('blockedAutoscalingMessages', () => {
+  const observedAt = Date.parse('2026-10-10T14:10:00Z');
+  const withCondition = (condition: Partial<AutoscalingStatus['conditions'][number]>) =>
+    capped({ conditions: [{ type: 'ScalingActive', status: 'False', reason: 'FailedGetResourceMetric', message: 'failed to get cpu utilization: did not receive metrics for targeted pods (pods might be unready)', ...condition }] });
+
+  it('leaves out a metrics gap within the restart window', () => {
+    expect(blockedAutoscalingMessages(withCondition({ lastTransitionTime: '2026-10-10T14:08:30Z' }), observedAt)).toEqual([]);
+  });
+
+  it('reports a metrics gap that outlasts the restart window, in plain words', () => {
+    expect(blockedAutoscalingMessages(withCondition({ lastTransitionTime: '2026-10-10T14:02:00Z' }), observedAt)).toEqual([
+      "The autoscaler hasn't received usage readings from the replicas for 8 minutes, so it isn't scaling. A replica that never becomes ready stops its readings; check the replicas below.",
+    ]);
+  });
+
+  it('reports a metrics gap with no start time, which cannot be told from a lasting one', () => {
+    expect(blockedAutoscalingMessages(withCondition({}), observedAt)).toEqual(["The autoscaler hasn't received usage readings from the replicas, so it isn't scaling. A replica that never becomes ready stops its readings; check the replicas below."]);
+  });
+
+  it('reports any other blocked condition with its own reason', () => {
+    expect(blockedAutoscalingMessages(withCondition({ type: 'AbleToScale', reason: 'FailedGetScale', message: 'the HPA controller was unable to get the target scale' }), observedAt)).toEqual([
+      "The autoscaler can't scale right now: the HPA controller was unable to get the target scale",
+    ]);
+  });
+
+  it('ignores conditions that are not blocking', () => {
+    expect(blockedAutoscalingMessages(withCondition({ status: 'True', reason: 'ValidMetricFound' }), observedAt)).toEqual([]);
+  });
+
+  it('reads ScalingLimited False as the healthy within-range state', () => {
+    expect(blockedAutoscalingMessages(withCondition({ type: 'ScalingLimited', reason: 'DesiredWithinRange', message: 'the desired count is within the acceptable range' }), observedAt)).toEqual([]);
   });
 });

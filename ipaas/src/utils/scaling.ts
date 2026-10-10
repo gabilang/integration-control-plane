@@ -92,6 +92,37 @@ export function cappedMetrics(a: Autoscaling): CappedMetric[] {
   return capped;
 }
 
+// Every applied change replaces the replicas, and a new replica reports no usage until the metrics
+// pipeline has sampled it, so the HPA briefly cannot read the replicas after each change. That
+// passes on its own; only a gap that outlasts this window means scaling has stalled.
+export const METRICS_GAP_GRACE_MS = 3 * 60 * 1000;
+const METRICS_GAP_REASONS = new Set(['FailedGetResourceMetric', 'FailedComputeMetricsReplicas']);
+// The conditions that stop scaling when False. ScalingLimited reads the other way round: False is
+// the healthy "within range", and its True "at a bound" is reported by atMaxReplicasMessage.
+const BLOCKING_CONDITIONS = new Set(['AbleToScale', 'ScalingActive']);
+
+/**
+ * What the HPA reports about not scaling that is worth telling the user, as of `observedAt` (ms):
+ * a missing-metrics gap only once it outlasts the restart window, and any other blocked condition
+ * in plain words. A gap with no reported start time is shown, since it cannot be told apart from
+ * one that persists.
+ */
+export function blockedAutoscalingMessages(a: Autoscaling, observedAt: number): string[] {
+  const messages = new Set<string>();
+  for (const c of a.status?.conditions ?? []) {
+    if (c.status !== 'False' || !BLOCKING_CONDITIONS.has(c.type)) continue;
+    if (!METRICS_GAP_REASONS.has(c.reason)) {
+      messages.add(`The autoscaler can't scale right now: ${c.message || c.reason}`);
+      continue;
+    }
+    const since = c.lastTransitionTime ? Date.parse(c.lastTransitionTime) : Number.NaN;
+    if (!Number.isNaN(since) && observedAt - since < METRICS_GAP_GRACE_MS) continue;
+    const duration = Number.isNaN(since) ? '' : ` for ${Math.floor((observedAt - since) / 60_000)} minutes`;
+    messages.add(`The autoscaler hasn't received usage readings from the replicas${duration}, so it isn't scaling. A replica that never becomes ready stops its readings; check the replicas below.`);
+  }
+  return [...messages];
+}
+
 /** Why the autoscaler is held at its maximum, naming each metric over its target and the replicas it needs. */
 export function atMaxReplicasMessage(a: Autoscaling): string {
   const cap = a.maxReplicas === undefined ? 'its maximum' : `${a.maxReplicas}`;

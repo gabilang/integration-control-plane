@@ -93,6 +93,8 @@ export interface AutoscalingCondition {
   status: string;
   reason: string;
   message: string;
+  /** When the condition took its current status (RFC 3339); absent if the cluster did not report it. */
+  lastTransitionTime?: string;
 }
 
 /** The live HPA, read from the data plane. Absent while autoscaling is off or before the HPA exists. */

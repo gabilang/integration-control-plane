@@ -27,7 +27,7 @@ import ScaleMethodCard from './ScaleMethodCard';
 import RangeInput from './RangeInput';
 import ThresholdSlider from './ThresholdSlider';
 import type { Autoscaling } from '../../types/scaling';
-import { atMaxReplicasMessage } from '../../utils/scaling';
+import { atMaxReplicasMessage, blockedAutoscalingMessages } from '../../utils/scaling';
 import { alertSx, cardsRowSx, sectionSx, sectionTitleSx } from './CloudAutoscaling.styles';
 
 const NOT_AVAILABLE = 'Not available yet';
@@ -163,20 +163,20 @@ function HpaForm({ autoscaling, canManage, applying, onApply }: { autoscaling: A
  * why it is not scaling. The replica counts sit in the replicas table and the utilization in the
  * usage cards, so nothing renders while the HPA is scaling freely.
  */
-function HpaAlerts({ autoscaling }: { autoscaling: Autoscaling }): JSX.Element | null {
+function HpaAlerts({ autoscaling, observedAt }: { autoscaling: Autoscaling; observedAt: number }): JSX.Element | null {
   const { status } = autoscaling;
   if (!status) return null;
-  // A False condition is the HPA saying why it is not scaling, e.g. no CPU metrics yet.
-  const blocked = status.conditions.filter((c) => c.status === 'False');
+  // Why the HPA is not scaling, minus the brief metrics gap that follows every applied change.
+  const blocked = blockedAutoscalingMessages(autoscaling, observedAt);
   // ScalingLimited holds at either bound; only the upper one means demand is going unmet.
   const atMax = status.conditions.some((c) => c.type === 'ScalingLimited' && c.status === 'True' && c.reason === 'TooManyReplicas');
   if (!atMax && blocked.length === 0) return null;
   return (
     <Stack gap={1} sx={sectionSx}>
       {atMax && <Alert severity="warning">{atMaxReplicasMessage(autoscaling)}</Alert>}
-      {blocked.map((c) => (
-        <Alert key={c.type} severity="info">
-          {c.type}: {c.message || c.reason}
+      {blocked.map((message) => (
+        <Alert key={message} severity="warning">
+          {message}
         </Alert>
       ))}
     </Stack>
@@ -195,7 +195,8 @@ interface CloudAutoscalingProps {
 
 /** Cloud's scaling body: one per-environment HPA setting, on or off. Scale to zero is shown but cannot be chosen yet. */
 export default function CloudAutoscaling({ projectId, componentId, environmentId, environmentName, canManage, onSaved, onError }: CloudAutoscalingProps): JSX.Element {
-  const { data: autoscaling, isLoading, isError, error, refetch } = useAutoscaling(projectId, componentId, environmentId);
+  // dataUpdatedAt is when the status was read, the moment its conditions describe.
+  const { data: autoscaling, dataUpdatedAt, isLoading, isError, error, refetch } = useAutoscaling(projectId, componentId, environmentId);
   const update = useUpdateAutoscaling(projectId);
   // Autoscaling is a paid feature. The billing org is the one the app shell already loads, so this
   // reads from the shared cache rather than asking billing again.
@@ -362,7 +363,7 @@ export default function CloudAutoscaling({ projectId, componentId, environmentId
         )}
       </Stack>
 
-      {paid && autoscaling.enabled && <HpaAlerts autoscaling={autoscaling} />}
+      {paid && autoscaling.enabled && <HpaAlerts autoscaling={autoscaling} observedAt={dataUpdatedAt} />}
 
       <Dialog open={confirming !== null} onClose={() => setConfirming(null)} maxWidth="xs" fullWidth>
         <DialogTitle>{confirming === 'enable' ? 'Turn on autoscaling?' : 'Turn off autoscaling?'}</DialogTitle>
