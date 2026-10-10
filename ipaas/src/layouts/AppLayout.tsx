@@ -1360,6 +1360,14 @@ function AppLayoutInner(): JSX.Element {
                                 <Sidebar.ItemLabel>Health Checks</Sidebar.ItemLabel>
                               </Sidebar.Item>
                             )}
+                            {isGenericService && (
+                              <Sidebar.Item id="scaling">
+                                <Sidebar.ItemIcon>
+                                  <Maximize2 size={20} />
+                                </Sidebar.ItemIcon>
+                                <Sidebar.ItemLabel>Scaling</Sidebar.ItemLabel>
+                              </Sidebar.Item>
+                            )}
                           </Sidebar.Item>
                         </Sidebar.Category>,
 
@@ -1394,14 +1402,6 @@ function AppLayoutInner(): JSX.Element {
                                   <Link2 size={20} />
                                 </Sidebar.ItemIcon>
                                 <Sidebar.ItemLabel>Connections</Sidebar.ItemLabel>
-                              </Sidebar.Item>
-                            )}
-                            {isGenericService && !IS_CLOUD && (
-                              <Sidebar.Item id="scaling">
-                                <Sidebar.ItemIcon>
-                                  <Maximize2 size={20} />
-                                </Sidebar.ItemIcon>
-                                <Sidebar.ItemLabel>Scaling</Sidebar.ItemLabel>
                               </Sidebar.Item>
                             )}
                             {!IS_CLOUD && (

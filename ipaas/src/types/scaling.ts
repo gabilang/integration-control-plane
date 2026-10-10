@@ -82,6 +82,49 @@ export interface ScalingPath {
   releaseId: string;
 }
 
+/* ── cloud autoscaling ─────────────────────────────────────────────────────── */
+
+// Cloud scales through one per-environment HPA setting rather than the devops API's
+// release-scoped HPA, metric and HTTP-scaler resources: CPU is the only metric and
+// there is no scale to zero.
+
+export interface AutoscalingCondition {
+  type: string;
+  status: string;
+  reason: string;
+  message: string;
+}
+
+/** The live HPA, read from the data plane. Absent while autoscaling is off or before the HPA exists. */
+export interface AutoscalingStatus {
+  currentReplicas: number;
+  desiredReplicas: number;
+  currentCpuUtilizationPercentage?: number;
+  conditions: AutoscalingCondition[];
+}
+
+export interface Autoscaling {
+  environmentId: string;
+  /** False for integration types that cannot autoscale; writes are rejected. */
+  supported: boolean;
+  /** False when the deployed release predates autoscaling support; enabling needs a redeploy first. */
+  effective: boolean;
+  enabled: boolean;
+  /** Unset until autoscaling is first configured for the environment. */
+  minReplicas?: number;
+  maxReplicas?: number;
+  cpuUtilizationPercentage?: number;
+  /** Highest max replicas the platform accepts. */
+  maxReplicasLimit: number;
+  status?: AutoscalingStatus;
+  /** Set when the last applied setting failed to render or apply; the message says why. */
+  syncStatus?: string;
+  syncMessage?: string;
+}
+
+/** Enabling replaces all three bounds; disabling carries `enabled` alone. */
+export type AutoscalingWriteData = { enabled: true; minReplicas: number; maxReplicas: number; cpuUtilizationPercentage: number } | { enabled: false };
+
 /* ── pods / replicas (phase 4) ─────────────────────────────────────────────── */
 
 /** Cluster-query envelope: `{ payload: [...raw k8s objects] }`. */

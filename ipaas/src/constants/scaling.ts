@@ -36,6 +36,13 @@ export const HPA_CARD: ScalingMethodCard = {
   description: 'Your deployment will automatically scale based on the CPU and memory usage.',
 };
 
+/** Cloud's HPA scales on CPU alone. */
+export const CLOUD_HPA_CARD: ScalingMethodCard = {
+  value: ScalingMethod.HPA,
+  title: 'HPA',
+  description: 'Your deployment will automatically scale between a minimum and maximum number of replicas based on CPU usage.',
+};
+
 export const NO_AUTOSCALING_CARD: ScalingMethodCard = {
   value: ScalingMethod.None,
   title: 'No Autoscaling',
