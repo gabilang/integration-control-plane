@@ -25,6 +25,7 @@ import ScaleMethodCard from '../components/Scaling/ScaleMethodCard';
 import ScaleToZeroConfig from '../components/Scaling/ScaleToZeroConfig';
 import HpaConfig from '../components/Scaling/HpaConfig';
 import CloudAutoscaling from '../components/Scaling/CloudAutoscaling';
+import CloudReplicas from '../components/Scaling/CloudReplicas';
 import ReplicasTable from '../components/Scaling/ReplicasTable';
 import ComingSoon from './ComingSoon';
 import { Permissions } from '../constants/permissions';
@@ -35,6 +36,7 @@ import { useComponentByHandler } from '../hooks/useComponents';
 import { useComponentDeployment } from '../hooks/useDeployments';
 import { useRelease } from '../hooks/useDevopsConfigs';
 import { useEnvironments } from '../hooks/useEnvironments';
+import { useLoadComponentPermissions } from '../hooks/usePermissionLoader';
 import { useOrgUuid } from '../hooks/useOrgUuid';
 import { useProjectId } from '../hooks/useProjects';
 import { mainContainer } from '../utils/devopsConfigs';
@@ -47,6 +49,9 @@ export default function ComponentScaling({ org, project, component }: ComponentS
   const { projectId } = useProjectId(project);
   const { hasPermission } = useAccessControl();
   const { data: comp, isLoading } = useComponentByHandler(projectId, component);
+  // Landing straight on this page skips the Overview, which is where component-scoped
+  // permissions are normally loaded.
+  useLoadComponentPermissions(org, projectId, comp?.id ?? '');
   const canManage = hasPermission(Permissions.INTEGRATION_MANAGE, projectId, comp?.id);
 
   const tracks = useMemo(() => comp?.deploymentTracks ?? [], [comp?.deploymentTracks]);
@@ -158,8 +163,11 @@ export default function ComponentScaling({ org, project, component }: ComponentS
 
             {IS_CLOUD ? (
               selectedEnv ? (
-                // Keyed by environment so an unsaved HPA choice never carries over to another one.
-                <CloudAutoscaling key={selectedEnv.id} projectId={projectId} componentId={comp.id} environmentId={selectedEnv.id} environmentName={selectedEnv.name} canManage={canManage} onSaved={onSaved} onError={onError} />
+                <>
+                  {/* Keyed by environment so an unsaved HPA choice never carries over to another one. */}
+                  <CloudAutoscaling key={selectedEnv.id} projectId={projectId} componentId={comp.id} environmentId={selectedEnv.id} environmentName={selectedEnv.name} canManage={canManage} onSaved={onSaved} onError={onError} />
+                  <CloudReplicas key={`replicas-${selectedEnv.id}`} projectId={projectId} componentId={comp.id} componentHandler={component} releaseId={releaseId} environmentId={selectedEnv.id} orgHandler={org} projectHandler={project} canManage={canManage} />
+                </>
               ) : (
                 <Alert severity="info">Select an environment to configure scaling.</Alert>
               )
