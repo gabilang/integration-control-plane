@@ -16,17 +16,24 @@
  * under the License.
  */
 
-import { Alert, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Skeleton, Stack, Typography } from '@wso2/oxygen-ui';
-import { useState, type JSX } from 'react';
+import { Alert, Box, Button, CircularProgress, Collapse, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Skeleton, Stack, Typography } from '@wso2/oxygen-ui';
+import { useEffect, useRef, useState, type JSX } from 'react';
 import { useAutoscaling, useUpdateAutoscaling } from '../../hooks/useScaling';
 import { CLOUD_HPA_CARD, CLOUD_MEMORY_THRESHOLD, CPU_THRESHOLD, NO_AUTOSCALING_CARD, SCALE_TO_ZERO_CARD } from '../../constants/scaling';
 import ScaleMethodCard from './ScaleMethodCard';
 import RangeInput from './RangeInput';
 import ThresholdSlider from './ThresholdSlider';
 import type { Autoscaling } from '../../types/scaling';
+import { atMaxReplicasMessage } from '../../utils/scaling';
 import { alertSx, cardsRowSx, sectionSx, sectionTitleSx } from './CloudAutoscaling.styles';
 
 const NOT_AVAILABLE = 'Not available yet';
+const APPLYING_MESSAGE = 'Applying the autoscaling settings…';
+// An HPA change is part of the deployment, so applying it replaces the running replicas once.
+const APPLIED_MESSAGE = 'Autoscaling settings applied. They take effect within a few minutes as the replicas are replaced.';
+// Matches the Runtime page's notices. Only "applied" hides itself: "applying" holds until its result
+// replaces it, and an error stays until dismissed so it cannot vanish before it is read.
+const APPLIED_HIDE_MS = 6000;
 const REDEPLOY_FOR_MEMORY = 'Redeploy this integration to the environment to use a memory threshold';
 const noop = (): void => undefined;
 
@@ -49,27 +56,84 @@ function initialValues(a: Autoscaling): HpaValues {
   };
 }
 
-function HpaForm({ autoscaling, canManage, saving, onSubmit }: { autoscaling: Autoscaling; canManage: boolean; saving: boolean; onSubmit: (values: HpaValues) => void }): JSX.Element {
-  const [values, setValues] = useState(() => initialValues(autoscaling));
-  const { minReplicas, maxReplicas, cpuUtilizationPercentage } = values;
+interface ReplicaBounds {
+  minReplicas: number;
+  maxReplicas: number;
+}
+
+const sameBounds = (a: ReplicaBounds, b: ReplicaBounds): boolean => a.minReplicas === b.minReplicas && a.maxReplicas === b.maxReplicas;
+
+const replicaActionsSx = { display: 'flex', gap: 1, pb: 0.5 } as const;
+
+// Every applied HPA change replaces the running replicas once, so a threshold change waits for a
+// short pause: a run of keyboard steps on a slider becomes one write, not one rollout per step.
+const APPLY_DELAY_MS = 800;
+
+/**
+ * The settings of an enabled autoscaler. Thresholds apply on their own once a slider is let go;
+ * replica bounds are edited together and applied with Update, which, with Reset, shows only while
+ * the bounds differ from what the server holds.
+ */
+function HpaForm({ autoscaling, canManage, applying, onApply }: { autoscaling: Autoscaling; canManage: boolean; applying: boolean; onApply: (values: HpaValues) => void }): JSX.Element {
+  const saved = initialValues(autoscaling);
+  const savedBounds: ReplicaBounds = { minReplicas: saved.minReplicas, maxReplicas: saved.maxReplicas };
+  const [bounds, setBounds] = useState<ReplicaBounds>(savedBounds);
+  const [cpu, setCpu] = useState(saved.cpuUtilizationPercentage);
   // Held apart from the on/off switch so turning memory off and on again keeps the chosen target.
   const [memoryOn, setMemoryOn] = useState(autoscaling.memoryUtilizationPercentage !== undefined);
   const [memoryTarget, setMemoryTarget] = useState(autoscaling.memoryUtilizationPercentage ?? CLOUD_MEMORY_THRESHOLD.default);
-  const locked = !canManage || saving;
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Bounds sent with Update that the server has not reported yet. A threshold applied meanwhile must
+  // carry them, or it would write the old bounds back over the update.
+  const updatedBounds = useRef<ReplicaBounds | null>(null);
+  // A change still waiting out its delay must not fire into a form that is gone.
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const locked = !canManage;
   // A release that cannot render memory refuses a memory target, but one already set must still be
   // removable, so the switch stays usable while it is on.
   const memoryLocked = locked || (!autoscaling.memoryEffective && !memoryOn);
-  const submit = () => onSubmit({ ...values, memoryUtilizationPercentage: memoryOn ? memoryTarget : undefined });
+  const dirty = !sameBounds(bounds, savedBounds);
+
+  // Unsaved bound edits stay out of a threshold write: they apply only with Update.
+  const appliedBounds = (): ReplicaBounds => (updatedBounds.current && !sameBounds(updatedBounds.current, savedBounds) ? updatedBounds.current : savedBounds);
+
+  const scheduleThresholds = (cpuTarget: number, on: boolean, target: number) => {
+    clearTimeout(timer.current);
+    const memory = on ? target : undefined;
+    if (cpuTarget === saved.cpuUtilizationPercentage && memory === autoscaling.memoryUtilizationPercentage) return;
+    timer.current = setTimeout(() => {
+      onApply({ ...appliedBounds(), cpuUtilizationPercentage: cpuTarget, memoryUtilizationPercentage: memory });
+    }, APPLY_DELAY_MS);
+  };
+
+  const update = () => {
+    // The update carries the thresholds as they stand, so a pending threshold write is folded into it.
+    clearTimeout(timer.current);
+    updatedBounds.current = bounds;
+    onApply({ ...bounds, cpuUtilizationPercentage: cpu, memoryUtilizationPercentage: memoryOn ? memoryTarget : undefined });
+  };
 
   return (
     <Stack gap={2.5}>
-      <Stack direction={{ xs: 'column', md: 'row' }} gap={4}>
-        <RangeInput label="Min replicas" value={minReplicas} onChange={(v) => setValues({ ...values, minReplicas: Math.min(v, maxReplicas) })} min={1} max={maxReplicas} disabled={locked} />
-        <RangeInput label="Max replicas" value={maxReplicas} onChange={(v) => setValues({ ...values, maxReplicas: Math.max(v, minReplicas) })} min={minReplicas} max={autoscaling.maxReplicasLimit} disabled={locked} />
+      <Stack direction="row" alignItems="flex-end" gap={2} flexWrap="wrap">
+        {/* Each bound clamps against the other, so min can never cross max. */}
+        <RangeInput label="Min replicas" value={bounds.minReplicas} onChange={(v) => setBounds({ ...bounds, minReplicas: Math.min(v, bounds.maxReplicas) })} min={1} max={bounds.maxReplicas} disabled={locked || applying} />
+        <RangeInput label="Max replicas" value={bounds.maxReplicas} onChange={(v) => setBounds({ ...bounds, maxReplicas: Math.max(v, bounds.minReplicas) })} min={bounds.minReplicas} max={autoscaling.maxReplicasLimit} disabled={locked || applying} />
+        {dirty && canManage && (
+          <Box sx={replicaActionsSx}>
+            <Button size="small" variant="outlined" color="secondary" onClick={() => setBounds(savedBounds)} disabled={applying}>
+              Reset
+            </Button>
+            <Button size="small" variant="contained" onClick={update} disabled={applying} startIcon={applying ? <CircularProgress size={14} color="inherit" /> : undefined}>
+              Update
+            </Button>
+          </Box>
+        )}
       </Stack>
       <Stack direction={{ xs: 'column', md: 'row' }} gap={2}>
-        {/* The autoscaler needs a CPU target, so the metric cannot be switched off. */}
-        <ThresholdSlider label="CPU Threshold" enabled value={cpuUtilizationPercentage} min={CPU_THRESHOLD.min} max={CPU_THRESHOLD.max} onToggle={noop} onChange={(v) => setValues({ ...values, cpuUtilizationPercentage: v })} disabled={locked} toggleLocked />
+        {/* The autoscaler needs a CPU target, so the metric cannot be switched off. Sliders apply when let go, not while dragging. */}
+        <ThresholdSlider label="CPU Threshold" enabled value={cpu} min={CPU_THRESHOLD.min} max={CPU_THRESHOLD.max} onToggle={noop} onChange={setCpu} onCommit={(v) => scheduleThresholds(v, memoryOn, memoryTarget)} disabled={locked} toggleLocked />
         {/* Opt-in beside CPU: the HPA follows whichever metric asks for more replicas. */}
         <ThresholdSlider
           label="Memory Threshold"
@@ -77,52 +141,36 @@ function HpaForm({ autoscaling, canManage, saving, onSubmit }: { autoscaling: Au
           value={memoryTarget}
           min={CLOUD_MEMORY_THRESHOLD.min}
           max={CLOUD_MEMORY_THRESHOLD.max}
-          onToggle={setMemoryOn}
+          onToggle={(on) => {
+            setMemoryOn(on);
+            scheduleThresholds(cpu, on, memoryTarget);
+          }}
           onChange={setMemoryTarget}
+          onCommit={(v) => scheduleThresholds(cpu, memoryOn, v)}
           disabled={memoryLocked}
           note={autoscaling.memoryEffective ? undefined : REDEPLOY_FOR_MEMORY}
         />
       </Stack>
-      {canManage && (
-        <Stack direction="row">
-          <Button variant="contained" disabled={saving} onClick={submit} startIcon={saving ? <CircularProgress size={16} color="inherit" /> : undefined}>
-            {saving ? 'Saving…' : autoscaling.enabled ? 'Save' : 'Enable autoscaling'}
-          </Button>
-        </Stack>
-      )}
     </Stack>
   );
 }
 
-function HpaStatus({ autoscaling }: { autoscaling: Autoscaling }): JSX.Element {
+/**
+ * What the HPA reports that no other part of the page shows: a load it is capped from meeting, and
+ * why it is not scaling. The replica counts sit in the replicas table and the utilization in the
+ * usage cards, so nothing renders while the HPA is scaling freely.
+ */
+function HpaAlerts({ autoscaling }: { autoscaling: Autoscaling }): JSX.Element | null {
   const { status } = autoscaling;
-  if (!status) {
-    return (
-      <Typography variant="body2" color="text.secondary">
-        The autoscaler starts once the change reaches the environment, usually within a few minutes.
-      </Typography>
-    );
-  }
+  if (!status) return null;
   // A False condition is the HPA saying why it is not scaling, e.g. no CPU metrics yet.
   const blocked = status.conditions.filter((c) => c.status === 'False');
   // ScalingLimited holds at either bound; only the upper one means demand is going unmet.
   const atMax = status.conditions.some((c) => c.type === 'ScalingLimited' && c.status === 'True' && c.reason === 'TooManyReplicas');
+  if (!atMax && blocked.length === 0) return null;
   return (
-    <Stack gap={1}>
-      <Typography variant="body2">
-        Replicas: <strong>{status.currentReplicas}</strong> running, <strong>{status.desiredReplicas}</strong> desired
-      </Typography>
-      <Typography variant="body2">
-        CPU: {status.currentCpuUtilizationPercentage === undefined ? 'not reported yet' : <strong>{status.currentCpuUtilizationPercentage}%</strong>}
-        {autoscaling.cpuUtilizationPercentage !== undefined && ` (target ${autoscaling.cpuUtilizationPercentage}%)`}
-      </Typography>
-      {autoscaling.memoryUtilizationPercentage !== undefined && (
-        <Typography variant="body2">
-          Memory: {status.currentMemoryUtilizationPercentage === undefined ? 'not reported yet' : <strong>{status.currentMemoryUtilizationPercentage}%</strong>}
-          {` (target ${autoscaling.memoryUtilizationPercentage}%)`}
-        </Typography>
-      )}
-      {atMax && <Alert severity="warning">Running at the maximum replica count. The load would scale it further; raise Max replicas to allow more.</Alert>}
+    <Stack gap={1} sx={sectionSx}>
+      {atMax && <Alert severity="warning">{atMaxReplicasMessage(autoscaling)}</Alert>}
       {blocked.map((c) => (
         <Alert key={c.type} severity="info">
           {c.type}: {c.message || c.reason}
@@ -146,9 +194,19 @@ interface CloudAutoscalingProps {
 export default function CloudAutoscaling({ projectId, componentId, environmentId, environmentName, canManage, onSaved, onError }: CloudAutoscalingProps): JSX.Element {
   const { data: autoscaling, isLoading, isError, error, refetch } = useAutoscaling(projectId, componentId, environmentId);
   const update = useUpdateAutoscaling(projectId);
-  // HPA picked but not yet saved: the form shows, while the environment still runs without autoscaling.
-  const [hpaPicked, setHpaPicked] = useState(false);
-  const [confirmingDisable, setConfirmingDisable] = useState(false);
+  const [confirming, setConfirming] = useState<'enable' | 'disable' | null>(null);
+  // Reports a settings change where it was made, under the threshold cards; `info` means still applying.
+  const [applyStatus, setApplyStatus] = useState<{ type: 'info' | 'success' | 'error'; message: string } | null>(null);
+  // Kept apart from the status so the banner keeps its text while it collapses away.
+  const [applyOpen, setApplyOpen] = useState(false);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(hideTimer.current), []);
+  // Remounts the form on its saved values after a change the platform rejected.
+  const [formReset, setFormReset] = useState(0);
+  // Changes apply one write at a time: one made while a write is in flight waits for it, and only the
+  // latest waiting change is sent, so the last value the user chose is the one that sticks.
+  const writing = useRef(false);
+  const queued = useRef<HpaValues | null>(null);
 
   if (isLoading) {
     return (
@@ -178,42 +236,57 @@ export default function CloudAutoscaling({ projectId, componentId, environmentId
     return <Alert severity="info">Autoscaling isn&apos;t available for this integration type.</Alert>;
   }
 
-  const showHpa = autoscaling.enabled || hpaPicked;
+  const startValues = initialValues(autoscaling);
 
-  const selectHpa = () => {
-    if (!autoscaling.enabled) setHpaPicked(true);
+  const showApplyStatus = (status: { type: 'info' | 'success' | 'error'; message: string }) => {
+    clearTimeout(hideTimer.current);
+    setApplyStatus(status);
+    setApplyOpen(true);
+    if (status.type === 'success') hideTimer.current = setTimeout(() => setApplyOpen(false), APPLIED_HIDE_MS);
   };
 
-  const selectNoAutoscaling = () => {
-    if (autoscaling.enabled) setConfirmingDisable(true);
-    else setHpaPicked(false);
-  };
-
-  const enable = (values: HpaValues) => {
-    const wasEnabled = autoscaling.enabled;
+  const send = (values: HpaValues) => {
+    writing.current = true;
     update.mutate(
       { componentId, environmentId, data: { enabled: true, ...values } },
       {
-        // An HPA change is part of the deployment, so applying it replaces the running replicas once.
-        onSuccess: () => onSaved(wasEnabled ? 'Autoscaling settings saved. They take effect within a few minutes as the replicas are replaced.' : 'Autoscaling enabled. It takes effect within a few minutes as the replicas are replaced.'),
-        onError: (e) => onError(e instanceof Error ? e.message : 'Failed to save the autoscaling settings.'),
+        // Applied only once nothing else is waiting to go out; until then the change is still being applied.
+        onSuccess: () => {
+          if (!queued.current) showApplyStatus({ type: 'success', message: APPLIED_MESSAGE });
+        },
+        onError: (e) => {
+          // A rejected change leaves the saved setting in force, so the form goes back to showing it.
+          queued.current = null;
+          setFormReset((n) => n + 1);
+          showApplyStatus({ type: 'error', message: e instanceof Error ? e.message : 'Failed to apply the autoscaling settings.' });
+        },
+        onSettled: () => {
+          writing.current = false;
+          const next = queued.current;
+          queued.current = null;
+          if (next) send(next);
+        },
       },
     );
   };
 
-  const disable = () => {
+  const apply = (values: HpaValues) => {
+    showApplyStatus({ type: 'info', message: APPLYING_MESSAGE });
+    if (writing.current) queued.current = values;
+    else send(values);
+  };
+
+  const confirm = () => {
+    const turningOn = confirming === 'enable';
+    clearTimeout(hideTimer.current);
+    setApplyOpen(false);
     update.mutate(
-      { componentId, environmentId, data: { enabled: false } },
+      { componentId, environmentId, data: turningOn ? { enabled: true, ...startValues } : { enabled: false } },
       {
-        onSuccess: () => {
-          setConfirmingDisable(false);
-          setHpaPicked(false);
-          onSaved('Autoscaling turned off. The integration returns to a fixed number of replicas within a few minutes.');
-        },
-        onError: (e) => {
-          setConfirmingDisable(false);
-          onError(e instanceof Error ? e.message : 'Failed to turn off autoscaling.');
-        },
+        // An HPA change is part of the deployment, so applying it replaces the running replicas once.
+        onSuccess: () => onSaved(turningOn ? 'Autoscaling turned on. It takes effect within a few minutes as the replicas are replaced.' : 'Autoscaling turned off. The integration returns to a fixed number of replicas within a few minutes.'),
+        onError: (e) => onError(e instanceof Error ? e.message : turningOn ? 'Failed to turn on autoscaling.' : 'Failed to turn off autoscaling.'),
+        onSettled: () => setConfirming(null),
       },
     );
   };
@@ -234,23 +307,33 @@ export default function CloudAutoscaling({ projectId, componentId, environmentId
 
       <Stack direction={{ xs: 'column', md: 'row' }} gap={2} sx={cardsRowSx}>
         <ScaleMethodCard title={SCALE_TO_ZERO_CARD.title} description={SCALE_TO_ZERO_CARD.description} selected={false} disabled note={NOT_AVAILABLE} onSelect={noop} />
-        <ScaleMethodCard title={CLOUD_HPA_CARD.title} description={CLOUD_HPA_CARD.description} selected={showHpa} disabled={!canManage || (!autoscaling.enabled && !autoscaling.effective)} onSelect={selectHpa} />
-        <ScaleMethodCard title={NO_AUTOSCALING_CARD.title} description={NO_AUTOSCALING_CARD.description} selected={!showHpa} disabled={!canManage} onSelect={selectNoAutoscaling} />
+        <ScaleMethodCard
+          title={CLOUD_HPA_CARD.title}
+          description={CLOUD_HPA_CARD.description}
+          selected={autoscaling.enabled}
+          disabled={!canManage || (!autoscaling.enabled && !autoscaling.effective)}
+          onSelect={() => !autoscaling.enabled && setConfirming('enable')}
+        />
+        <ScaleMethodCard title={NO_AUTOSCALING_CARD.title} description={NO_AUTOSCALING_CARD.description} selected={!autoscaling.enabled} disabled={!canManage} onSelect={() => autoscaling.enabled && setConfirming('disable')} />
       </Stack>
 
       <Typography variant="subtitle1" sx={sectionTitleSx}>
         Scaling Configuration
       </Typography>
-      <Stack sx={sectionSx}>
-        {showHpa ? (
-          // Keyed on the saved setting so the form reopens on it after every save, without an effect.
-          <HpaForm
-            key={`${autoscaling.enabled}:${autoscaling.minReplicas}:${autoscaling.maxReplicas}:${autoscaling.cpuUtilizationPercentage}:${autoscaling.memoryUtilizationPercentage}:${autoscaling.memoryEffective}`}
-            autoscaling={autoscaling}
-            canManage={canManage && (autoscaling.enabled || autoscaling.effective)}
-            saving={update.isPending}
-            onSubmit={enable}
-          />
+      <Stack gap={2.5} sx={sectionSx}>
+        {autoscaling.enabled ? (
+          // Not keyed on the saved values: the form already holds what it applied, and remounting on
+          // each refetch would reset a slider the user is still dragging.
+          <>
+            <HpaForm key={`${formReset}:${autoscaling.memoryEffective}`} autoscaling={autoscaling} canManage={canManage} applying={update.isPending} onApply={apply} />
+            <Collapse in={applyOpen} unmountOnExit>
+              {applyStatus && (
+                <Alert severity={applyStatus.type} icon={applyStatus.type === 'info' ? <CircularProgress size={20} color="inherit" /> : undefined} onClose={() => setApplyOpen(false)}>
+                  {applyStatus.message}
+                </Alert>
+              )}
+            </Collapse>
+          </>
         ) : (
           <Typography variant="body2" color="text.secondary">
             This integration runs a fixed number of replicas in {environmentName}. Choose HPA to scale it with CPU and memory usage.
@@ -258,28 +341,29 @@ export default function CloudAutoscaling({ projectId, componentId, environmentId
         )}
       </Stack>
 
-      {autoscaling.enabled && (
-        <>
-          <Typography variant="subtitle1" sx={sectionTitleSx}>
-            Current Status
-          </Typography>
-          <HpaStatus autoscaling={autoscaling} />
-        </>
-      )}
+      {autoscaling.enabled && <HpaAlerts autoscaling={autoscaling} />}
 
-      <Dialog open={confirmingDisable} onClose={() => setConfirmingDisable(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Turn off autoscaling?</DialogTitle>
+      <Dialog open={confirming !== null} onClose={() => setConfirming(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>{confirming === 'enable' ? 'Turn on autoscaling?' : 'Turn off autoscaling?'}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            The autoscaler is removed from <strong>{environmentName}</strong> and the integration returns to a fixed number of replicas. Continue?
+            {confirming === 'enable' ? (
+              <>
+                The integration scales in <strong>{environmentName}</strong> between {startValues.minReplicas} and {startValues.maxReplicas} replicas at {startValues.cpuUtilizationPercentage}% CPU. You can change these right after. Continue?
+              </>
+            ) : (
+              <>
+                The autoscaler is removed from <strong>{environmentName}</strong> and the integration returns to a fixed number of replicas. Continue?
+              </>
+            )}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setConfirmingDisable(false)} disabled={update.isPending}>
+          <Button onClick={() => setConfirming(null)} disabled={update.isPending}>
             Cancel
           </Button>
-          <Button variant="contained" onClick={disable} disabled={update.isPending} startIcon={update.isPending ? <CircularProgress size={16} color="inherit" /> : undefined}>
-            Turn off
+          <Button variant="contained" onClick={confirm} disabled={update.isPending} startIcon={update.isPending ? <CircularProgress size={16} color="inherit" /> : undefined}>
+            {confirming === 'enable' ? 'Turn on' : 'Turn off'}
           </Button>
         </DialogActions>
       </Dialog>

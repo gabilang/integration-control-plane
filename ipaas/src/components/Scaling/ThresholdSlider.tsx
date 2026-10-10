@@ -30,6 +30,8 @@ interface ThresholdSliderProps {
   max: number;
   onToggle: (v: boolean) => void;
   onChange: (v: number) => void;
+  /** Called once the user lets go of the slider (or finishes a keyboard step), with the settled value. */
+  onCommit?: (v: number) => void;
   disabled: boolean;
   /** Holds the switch where it is, for a metric the scaler always needs or can never use. */
   toggleLocked?: boolean;
@@ -38,12 +40,12 @@ interface ThresholdSliderProps {
 }
 
 /** A utilization-threshold metric: an on/off switch and its target percentage. */
-export default function ThresholdSlider({ label, enabled, value, min, max, onToggle, onChange, disabled, toggleLocked, note }: ThresholdSliderProps): JSX.Element {
+export default function ThresholdSlider({ label, enabled, value, min, max, onToggle, onChange, onCommit, disabled, toggleLocked, note }: ThresholdSliderProps): JSX.Element {
   return (
     <Paper variant="outlined" sx={panelSx}>
       <FormControlLabel control={<Switch checked={enabled} onChange={(e) => onToggle(e.target.checked)} disabled={disabled || toggleLocked} />} label={label} />
       <Box sx={sliderBoxSx(enabled)}>
-        <Slider value={value} min={min} max={max} onChange={(_e, v) => onChange(v as number)} disabled={disabled || !enabled} valueLabelDisplay="auto" />
+        <Slider value={value} min={min} max={max} onChange={(_e, v) => onChange(v as number)} onChangeCommitted={(_e, v) => onCommit?.(v as number)} disabled={disabled || !enabled} valueLabelDisplay="auto" />
         <Typography variant="caption" color="text.secondary">
           {note ?? `${value}% utilization`}
         </Typography>

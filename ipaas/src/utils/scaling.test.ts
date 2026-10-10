@@ -17,8 +17,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { derivePodRows } from './scaling';
+import { atMaxReplicasMessage, cappedMetrics, derivePodRows } from './scaling';
 import type { ClusterPod, PodMetrics } from '../types/runtime';
+import type { Autoscaling, AutoscalingStatus } from '../types/scaling';
 
 const pod = (over: Partial<ClusterPod> & { name: string }): ClusterPod => ({
   metadata: { name: over.name, uid: over.name, ...over.metadata },
@@ -45,5 +46,52 @@ describe('derivePodRows', () => {
     const metrics: PodMetrics[] = [{ metadata: { name: 'a' }, containers: [{ name: 'main', usage: { cpu: '10m', memory: '20Mi' } }] }];
     const [row] = derivePodRows(pods, metrics);
     expect(row).toMatchObject({ name: 'a', status: 'Running', isRunning: true, readyContainers: 1, totalContainers: 2, restarts: 3, cpu: '10m', memory: '20Mi' });
+  });
+});
+
+// Two replicas held at a max of 2: CPU 2% against 57%, memory 40% against 20%.
+const capped = (status: Partial<AutoscalingStatus>, over: Partial<Autoscaling> = {}): Autoscaling => ({
+  environmentId: 'development',
+  supported: true,
+  effective: true,
+  memoryEffective: true,
+  enabled: true,
+  minReplicas: 1,
+  maxReplicas: 2,
+  cpuUtilizationPercentage: 57,
+  memoryUtilizationPercentage: 20,
+  maxReplicasLimit: 5,
+  status: { currentReplicas: 2, desiredReplicas: 2, conditions: [], ...status },
+  ...over,
+});
+
+describe('cappedMetrics', () => {
+  it('names the metric whose own replica count exceeds the maximum', () => {
+    expect(cappedMetrics(capped({ currentCpuUtilizationPercentage: 2, currentMemoryUtilizationPercentage: 40 }))).toEqual([{ name: 'Memory', current: 40, target: 20, wants: 4 }]);
+  });
+
+  it('names every metric over the maximum', () => {
+    expect(cappedMetrics(capped({ currentCpuUtilizationPercentage: 95, currentMemoryUtilizationPercentage: 40 })).map((m) => m.name)).toEqual(['CPU', 'Memory']);
+  });
+
+  it('ignores a metric with no reading, and one that is not targeted', () => {
+    expect(cappedMetrics(capped({ currentCpuUtilizationPercentage: 2 }))).toEqual([]);
+    expect(cappedMetrics(capped({ currentCpuUtilizationPercentage: 2, currentMemoryUtilizationPercentage: 40 }, { memoryUtilizationPercentage: undefined }))).toEqual([]);
+  });
+
+  it('is empty without a live status', () => {
+    expect(cappedMetrics(capped({}, { status: undefined }))).toEqual([]);
+  });
+});
+
+describe('atMaxReplicasMessage', () => {
+  it('names the metric, its reading, its target and the replicas it needs', () => {
+    expect(atMaxReplicasMessage(capped({ currentCpuUtilizationPercentage: 2, currentMemoryUtilizationPercentage: 40 }))).toBe(
+      'Memory is at 40%, above its 20% target, and needs 4 replicas. Max replicas caps it at 2. Raise Max replicas to scale further, or the target if this usage is expected.',
+    );
+  });
+
+  it('falls back to the bare cap while no reading can be named', () => {
+    expect(atMaxReplicasMessage(capped({}))).toBe('The autoscaler needs more replicas than the maximum of 2. Raise Max replicas to allow more.');
   });
 });
