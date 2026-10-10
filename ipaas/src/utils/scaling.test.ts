@@ -17,7 +17,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { atMaxReplicasMessage, blockedAutoscalingMessages, cappedMetrics, derivePodRows } from './scaling';
+import { atMaxReplicasMessage, blockedAutoscalingMessages, cappedMetrics, derivePodRows, pollsAutoscaling } from './scaling';
 import type { ClusterPod, PodMetrics } from '../types/runtime';
 import type { Autoscaling, AutoscalingStatus } from '../types/scaling';
 
@@ -127,5 +127,23 @@ describe('blockedAutoscalingMessages', () => {
 
   it('reads ScalingLimited False as the healthy within-range state', () => {
     expect(blockedAutoscalingMessages(withCondition({ type: 'ScalingLimited', reason: 'DesiredWithinRange', message: 'the desired count is within the acceptable range' }), observedAt)).toEqual([]);
+  });
+});
+
+describe('pollsAutoscaling', () => {
+  it('polls while autoscaling is on', () => {
+    expect(pollsAutoscaling(capped({}))).toBe(true);
+  });
+
+  it('stops once autoscaling is off and the platform reports no failure', () => {
+    expect(pollsAutoscaling(capped({}, { enabled: false }))).toBe(false);
+  });
+
+  it('follows a reported render failure after autoscaling is turned off, until it clears', () => {
+    expect(pollsAutoscaling(capped({}, { enabled: false, syncStatus: 'RenderingFailed', syncMessage: 'autoscaling.minReplicas must not exceed autoscaling.maxReplicas.' }))).toBe(true);
+  });
+
+  it('does not poll before the setting has loaded', () => {
+    expect(pollsAutoscaling(undefined)).toBe(false);
   });
 });

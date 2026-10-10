@@ -20,6 +20,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createHpa, createHpaMetric, deleteHpaMetric, getAutoscaling, getHpa, getHttpScaler, getScalingState, listPodMetrics, listPods, setScalingMethod, updateAutoscaling, updateHpa, updateHpaMetric, updateHttpScaler } from '#api/scaling';
 import { IS_CLOUD, IS_WIP } from '../features';
 import { useOrgUuid } from './useOrgUuid';
+import { pollsAutoscaling } from '../utils/scaling';
 import type { AutoscalingWriteData, HpaMetric, HpaWriteData, HttpScalerWriteData, ScalingMethodToggle, ScalingPath } from '../types/scaling';
 
 const ROOT = 'scaling';
@@ -34,7 +35,6 @@ export function isAutoscalingEnabled(): boolean {
   return IS_CLOUD;
 }
 
-// The HPA moves the replica count on its own, so the live status is polled while autoscaling is on.
 const AUTOSCALING_POLL_MS = 10_000;
 
 export function useAutoscaling(projectId: string, componentId: string | undefined, environmentId: string) {
@@ -44,7 +44,7 @@ export function useAutoscaling(projectId: string, componentId: string | undefine
     queryFn: () => getAutoscaling(orgUuid!, projectId, componentId!, environmentId),
     enabled: isAutoscalingEnabled() && !!orgUuid && !!projectId && !!componentId && !!environmentId,
     retry: false,
-    refetchInterval: (query) => (query.state.data?.enabled ? AUTOSCALING_POLL_MS : false),
+    refetchInterval: (query) => (pollsAutoscaling(query.state.data) ? AUTOSCALING_POLL_MS : false),
   });
 }
 

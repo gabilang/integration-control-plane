@@ -132,3 +132,13 @@ export function atMaxReplicasMessage(a: Autoscaling): string {
   const reasons = capped.map((m) => `${m.name} is at ${m.current}%, above its ${m.target}% target, and needs ${m.wants} replicas`).join('; ');
   return `${reasons}. Max replicas caps it at ${cap}. Raise Max replicas to scale further, or the target if this usage is expected.`;
 }
+
+/**
+ * Whether the autoscaling setting changes without a write and has to be re-read on a timer. While
+ * autoscaling is on, the HPA moves the replica count by itself. A failed render clears only when the
+ * platform renders again, which can land after the write that resolves it has been read back, so a
+ * reported failure is followed until it clears, whether autoscaling is on or off.
+ */
+export function pollsAutoscaling(a: Autoscaling | undefined): boolean {
+  return !!a && (a.enabled || !!a.syncStatus);
+}
