@@ -19,7 +19,7 @@
 import { Alert, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Skeleton, Stack, Typography } from '@wso2/oxygen-ui';
 import { useState, type JSX } from 'react';
 import { useAutoscaling, useUpdateAutoscaling } from '../../hooks/useScaling';
-import { CLOUD_HPA_CARD, CPU_THRESHOLD, MEMORY_THRESHOLD, NO_AUTOSCALING_CARD, SCALE_TO_ZERO_CARD } from '../../constants/scaling';
+import { CLOUD_HPA_CARD, CLOUD_MEMORY_THRESHOLD, CPU_THRESHOLD, NO_AUTOSCALING_CARD, SCALE_TO_ZERO_CARD } from '../../constants/scaling';
 import ScaleMethodCard from './ScaleMethodCard';
 import RangeInput from './RangeInput';
 import ThresholdSlider from './ThresholdSlider';
@@ -27,12 +27,15 @@ import type { Autoscaling } from '../../types/scaling';
 import { alertSx, cardsRowSx, sectionSx, sectionTitleSx } from './CloudAutoscaling.styles';
 
 const NOT_AVAILABLE = 'Not available yet';
+const REDEPLOY_FOR_MEMORY = 'Redeploy this integration to the environment to use a memory threshold';
 const noop = (): void => undefined;
 
 interface HpaValues {
   minReplicas: number;
   maxReplicas: number;
   cpuUtilizationPercentage: number;
+  /** Unset, the HPA scales on CPU alone. */
+  memoryUtilizationPercentage?: number;
 }
 
 // The BFF reports no bounds until autoscaling is first enabled, and a bound written outside the
@@ -49,7 +52,14 @@ function initialValues(a: Autoscaling): HpaValues {
 function HpaForm({ autoscaling, canManage, saving, onSubmit }: { autoscaling: Autoscaling; canManage: boolean; saving: boolean; onSubmit: (values: HpaValues) => void }): JSX.Element {
   const [values, setValues] = useState(() => initialValues(autoscaling));
   const { minReplicas, maxReplicas, cpuUtilizationPercentage } = values;
+  // Held apart from the on/off switch so turning memory off and on again keeps the chosen target.
+  const [memoryOn, setMemoryOn] = useState(autoscaling.memoryUtilizationPercentage !== undefined);
+  const [memoryTarget, setMemoryTarget] = useState(autoscaling.memoryUtilizationPercentage ?? CLOUD_MEMORY_THRESHOLD.default);
   const locked = !canManage || saving;
+  // A release that cannot render memory refuses a memory target, but one already set must still be
+  // removable, so the switch stays usable while it is on.
+  const memoryLocked = locked || (!autoscaling.memoryEffective && !memoryOn);
+  const submit = () => onSubmit({ ...values, memoryUtilizationPercentage: memoryOn ? memoryTarget : undefined });
 
   return (
     <Stack gap={2.5}>
@@ -60,11 +70,22 @@ function HpaForm({ autoscaling, canManage, saving, onSubmit }: { autoscaling: Au
       <Stack direction={{ xs: 'column', md: 'row' }} gap={2}>
         {/* The autoscaler needs a CPU target, so the metric cannot be switched off. */}
         <ThresholdSlider label="CPU Threshold" enabled value={cpuUtilizationPercentage} min={CPU_THRESHOLD.min} max={CPU_THRESHOLD.max} onToggle={noop} onChange={(v) => setValues({ ...values, cpuUtilizationPercentage: v })} disabled={locked} toggleLocked />
-        <ThresholdSlider label="Memory Threshold" enabled={false} value={MEMORY_THRESHOLD.default} min={MEMORY_THRESHOLD.min} max={MEMORY_THRESHOLD.max} onToggle={noop} onChange={noop} disabled note={NOT_AVAILABLE} />
+        {/* Opt-in beside CPU: the HPA follows whichever metric asks for more replicas. */}
+        <ThresholdSlider
+          label="Memory Threshold"
+          enabled={memoryOn}
+          value={memoryTarget}
+          min={CLOUD_MEMORY_THRESHOLD.min}
+          max={CLOUD_MEMORY_THRESHOLD.max}
+          onToggle={setMemoryOn}
+          onChange={setMemoryTarget}
+          disabled={memoryLocked}
+          note={autoscaling.memoryEffective ? undefined : REDEPLOY_FOR_MEMORY}
+        />
       </Stack>
       {canManage && (
         <Stack direction="row">
-          <Button variant="contained" disabled={saving} onClick={() => onSubmit(values)} startIcon={saving ? <CircularProgress size={16} color="inherit" /> : undefined}>
+          <Button variant="contained" disabled={saving} onClick={submit} startIcon={saving ? <CircularProgress size={16} color="inherit" /> : undefined}>
             {saving ? 'Saving…' : autoscaling.enabled ? 'Save' : 'Enable autoscaling'}
           </Button>
         </Stack>
@@ -95,7 +116,13 @@ function HpaStatus({ autoscaling }: { autoscaling: Autoscaling }): JSX.Element {
         CPU: {status.currentCpuUtilizationPercentage === undefined ? 'not reported yet' : <strong>{status.currentCpuUtilizationPercentage}%</strong>}
         {autoscaling.cpuUtilizationPercentage !== undefined && ` (target ${autoscaling.cpuUtilizationPercentage}%)`}
       </Typography>
-      {atMax && <Alert severity="warning">Running at the maximum replica count. The CPU load would scale it further; raise Max replicas to allow more.</Alert>}
+      {autoscaling.memoryUtilizationPercentage !== undefined && (
+        <Typography variant="body2">
+          Memory: {status.currentMemoryUtilizationPercentage === undefined ? 'not reported yet' : <strong>{status.currentMemoryUtilizationPercentage}%</strong>}
+          {` (target ${autoscaling.memoryUtilizationPercentage}%)`}
+        </Typography>
+      )}
+      {atMax && <Alert severity="warning">Running at the maximum replica count. The load would scale it further; raise Max replicas to allow more.</Alert>}
       {blocked.map((c) => (
         <Alert key={c.type} severity="info">
           {c.type}: {c.message || c.reason}
@@ -218,7 +245,7 @@ export default function CloudAutoscaling({ projectId, componentId, environmentId
         {showHpa ? (
           // Keyed on the saved setting so the form reopens on it after every save, without an effect.
           <HpaForm
-            key={`${autoscaling.enabled}:${autoscaling.minReplicas}:${autoscaling.maxReplicas}:${autoscaling.cpuUtilizationPercentage}`}
+            key={`${autoscaling.enabled}:${autoscaling.minReplicas}:${autoscaling.maxReplicas}:${autoscaling.cpuUtilizationPercentage}:${autoscaling.memoryUtilizationPercentage}:${autoscaling.memoryEffective}`}
             autoscaling={autoscaling}
             canManage={canManage && (autoscaling.enabled || autoscaling.effective)}
             saving={update.isPending}
@@ -226,7 +253,7 @@ export default function CloudAutoscaling({ projectId, componentId, environmentId
           />
         ) : (
           <Typography variant="body2" color="text.secondary">
-            This integration runs a fixed number of replicas in {environmentName}. Choose HPA to scale it with CPU usage.
+            This integration runs a fixed number of replicas in {environmentName}. Choose HPA to scale it with CPU and memory usage.
           </Typography>
         )}
       </Stack>

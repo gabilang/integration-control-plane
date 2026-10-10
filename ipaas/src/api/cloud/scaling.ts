@@ -38,6 +38,7 @@ interface BffAutoscalingStatus {
   currentReplicas: number;
   desiredReplicas: number;
   currentCpuUtilizationPercentage?: number;
+  currentMemoryUtilizationPercentage?: number;
   conditions?: BffAutoscalingCondition[];
 }
 
@@ -45,10 +46,12 @@ interface BffAutoscaling {
   environment: string;
   supported: boolean;
   effective: boolean;
+  memoryEffective: boolean;
   enabled: boolean;
   minReplicas?: number;
   maxReplicas?: number;
   cpuUtilizationPercentage?: number;
+  memoryUtilizationPercentage?: number;
   maxReplicasLimit: number;
   status?: BffAutoscalingStatus;
   syncStatus?: string;
@@ -64,6 +67,7 @@ function toStatus(s: BffAutoscalingStatus): AutoscalingStatus {
     currentReplicas: s.currentReplicas,
     desiredReplicas: s.desiredReplicas,
     currentCpuUtilizationPercentage: s.currentCpuUtilizationPercentage,
+    currentMemoryUtilizationPercentage: s.currentMemoryUtilizationPercentage,
     conditions: (s.conditions ?? []).map(toCondition),
   };
 }
@@ -73,10 +77,12 @@ function toAutoscaling(environmentId: string, a: BffAutoscaling): Autoscaling {
     environmentId,
     supported: a.supported,
     effective: a.effective,
+    memoryEffective: a.memoryEffective,
     enabled: a.enabled,
     minReplicas: a.minReplicas,
     maxReplicas: a.maxReplicas,
     cpuUtilizationPercentage: a.cpuUtilizationPercentage,
+    memoryUtilizationPercentage: a.memoryUtilizationPercentage,
     maxReplicasLimit: a.maxReplicasLimit,
     status: a.status ? toStatus(a.status) : undefined,
     syncStatus: a.syncStatus || undefined,
@@ -86,10 +92,19 @@ function toAutoscaling(environmentId: string, a: BffAutoscaling): Autoscaling {
 
 export const getAutoscaling = async (_orgUuid: string, _projectId: string, componentId: string, environmentId: string): Promise<Autoscaling> => toAutoscaling(environmentId, await bff.get<BffAutoscaling>(autoscalingPath(componentId, environmentId)));
 
-// PUT replaces the whole setting, and the BFF rejects unknown fields, so the body is exactly the
-// write data. A 409 means the deployed release predates autoscaling: its message says to redeploy.
+// PUT replaces the whole setting and the BFF rejects unknown fields, so the body carries exactly
+// the chosen fields: an unset memory target is left out, which removes any stored one. A 409 means
+// the deployed release predates autoscaling, or memory targets: its message says to redeploy.
+function toBffWrite(data: AutoscalingWriteData): Record<string, boolean | number> {
+  if (!data.enabled) return { enabled: false };
+  const { minReplicas, maxReplicas, cpuUtilizationPercentage, memoryUtilizationPercentage } = data;
+  const body: Record<string, boolean | number> = { enabled: true, minReplicas, maxReplicas, cpuUtilizationPercentage };
+  if (memoryUtilizationPercentage !== undefined) body.memoryUtilizationPercentage = memoryUtilizationPercentage;
+  return body;
+}
+
 export const updateAutoscaling = async (_orgUuid: string, _projectId: string, componentId: string, environmentId: string, data: AutoscalingWriteData): Promise<void> => {
-  await bff.put(autoscalingPath(componentId, environmentId), data);
+  await bff.put(autoscalingPath(componentId, environmentId), toBffWrite(data));
 };
 
 export const getScalingState = (_orgUuid: string, _projectId: string, _componentId: string, _releaseId: string): Promise<ScalingState> => ni('getScalingState');

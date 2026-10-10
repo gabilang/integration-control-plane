@@ -53,15 +53,18 @@ describe('getAutoscaling', () => {
       environment: 'development',
       supported: true,
       effective: true,
+      memoryEffective: true,
       enabled: true,
       minReplicas: 2,
       maxReplicas: 4,
       cpuUtilizationPercentage: 50,
+      memoryUtilizationPercentage: 85,
       maxReplicasLimit: 5,
       status: {
         currentReplicas: 3,
         desiredReplicas: 4,
         currentCpuUtilizationPercentage: 91,
+        currentMemoryUtilizationPercentage: 62,
         conditions: [{ type: 'ScalingLimited', status: 'False' }],
       },
     });
@@ -73,15 +76,18 @@ describe('getAutoscaling', () => {
       environmentId: 'development',
       supported: true,
       effective: true,
+      memoryEffective: true,
       enabled: true,
       minReplicas: 2,
       maxReplicas: 4,
       cpuUtilizationPercentage: 50,
+      memoryUtilizationPercentage: 85,
       maxReplicasLimit: 5,
       status: {
         currentReplicas: 3,
         desiredReplicas: 4,
         currentCpuUtilizationPercentage: 91,
+        currentMemoryUtilizationPercentage: 62,
         conditions: [{ type: 'ScalingLimited', status: 'False', reason: '', message: '' }],
       },
       syncStatus: undefined,
@@ -90,7 +96,7 @@ describe('getAutoscaling', () => {
   });
 
   it('leaves bounds and status unset before autoscaling is first configured', async () => {
-    get.mockResolvedValue({ environment: 'development', supported: true, effective: false, enabled: false, maxReplicasLimit: 5 });
+    get.mockResolvedValue({ environment: 'development', supported: true, effective: false, memoryEffective: false, enabled: false, maxReplicasLimit: 5 });
 
     const got = await getAutoscaling('org', 'proj', 'order api', 'development');
 
@@ -99,11 +105,13 @@ describe('getAutoscaling', () => {
     expect(got.minReplicas).toBeUndefined();
     expect(got.maxReplicas).toBeUndefined();
     expect(got.cpuUtilizationPercentage).toBeUndefined();
+    expect(got.memoryUtilizationPercentage).toBeUndefined();
+    expect(got.memoryEffective).toBe(false);
     expect(got.status).toBeUndefined();
   });
 
   it('carries a render failure through for the page to show', async () => {
-    get.mockResolvedValue({ environment: 'development', supported: true, effective: true, enabled: true, maxReplicasLimit: 5, syncStatus: 'RenderingFailed', syncMessage: 'minReplicas must not exceed maxReplicas' });
+    get.mockResolvedValue({ environment: 'development', supported: true, effective: true, memoryEffective: true, enabled: true, maxReplicasLimit: 5, syncStatus: 'RenderingFailed', syncMessage: 'minReplicas must not exceed maxReplicas' });
 
     const got = await getAutoscaling('org', 'proj', 'order api', 'development');
 
@@ -113,6 +121,22 @@ describe('getAutoscaling', () => {
 });
 
 describe('updateAutoscaling', () => {
+  it('sends a memory target beside the CPU one when set', async () => {
+    put.mockResolvedValue({ status: 'ok' });
+
+    await updateAutoscaling('org', 'proj', 'order api', 'development', { enabled: true, minReplicas: 1, maxReplicas: 5, cpuUtilizationPercentage: 80, memoryUtilizationPercentage: 85 });
+
+    expect(put).toHaveBeenCalledWith(PATH, { enabled: true, minReplicas: 1, maxReplicas: 5, cpuUtilizationPercentage: 80, memoryUtilizationPercentage: 85 });
+  });
+
+  it('leaves an unset memory target out of the body, which removes a stored one', async () => {
+    put.mockResolvedValue({ status: 'ok' });
+
+    await updateAutoscaling('org', 'proj', 'order api', 'development', { enabled: true, minReplicas: 1, maxReplicas: 5, cpuUtilizationPercentage: 80, memoryUtilizationPercentage: undefined });
+
+    expect(Object.keys(put.mock.calls[0][1] as object)).toEqual(['enabled', 'minReplicas', 'maxReplicas', 'cpuUtilizationPercentage']);
+  });
+
   it('sends every bound when enabling', async () => {
     put.mockResolvedValue({ status: 'ok' });
 
