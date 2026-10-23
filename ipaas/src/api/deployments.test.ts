@@ -20,12 +20,15 @@ import { describe, expect, it } from 'vitest';
 
 import { toEnvEndpoint } from './deployments';
 
-// The two URLs OpenChoreo actually reports in a ReleaseBinding's status. There is no third,
-// project-scoped address: Project and Organization reach the same Service, gated by NetworkPolicy.
+// The two URLs OpenChoreo actually reports in a ReleaseBinding's status: Project reaches the
+// Service directly. Organization has no OpenChoreo-level address of its own — it goes through
+// the apip gateway's internal vhost, same as Public's external vhost, just reachable only from
+// inside the dataplane — so its URL comes from visibilityStatus.organization.url, not urls.*.
 const EXTERNAL = { host: 'gw.example', path: '/covid19-status-covid-commu-3e5', port: 443, scheme: 'https' };
 const INTERNAL = { host: 'covid-commu-3e5.dp-default-development.svc.cluster.local', path: '/', port: 8090, scheme: 'http' };
 const EXTERNAL_URL = 'https://gw.example/covid19-status-covid-commu-3e5';
 const INTERNAL_URL = 'http://covid-commu-3e5.dp-default-development.svc.cluster.local:8090';
+const ORGANIZATION_GATEWAY_URL = 'http://apip-internal.svc.cluster.local:8080/covid19-status-covid-commu-3e5';
 
 const bffEndpoint = (visibility: string[], urls: { external?: typeof EXTERNAL; internal?: typeof INTERNAL } = { external: EXTERNAL, internal: INTERNAL }) => ({
   name: 'covid-commu-3e5',
@@ -52,17 +55,41 @@ describe('toEnvEndpoint visibility URLs', () => {
     expect(ep.publicUrl).toBe('');
   });
 
-  // Both scopes reach the same Service, so both rows carry the same URL — one row per visibility.
-  it('gives organization+project the same in-cluster URL on both fields', () => {
-    const ep = toEnvEndpoint(bffEndpoint(['organization', 'project'], { internal: INTERNAL }), 'r1');
-    expect(ep.organizationUrl).toBe(INTERNAL_URL);
+  // Organization and project reach the endpoint through entirely different front doors — the
+  // apip gateway's internal vhost vs. the raw Service — so they must not share a URL.
+  it('gives organization the apip gateway URL and project the in-cluster Service URL', () => {
+    const ep = toEnvEndpoint(
+      {
+        ...bffEndpoint(['organization', 'project'], { internal: INTERNAL }),
+        visibilityStatus: { public: { status: 'DISABLED' as const }, organization: { status: 'ENABLED' as const, url: ORGANIZATION_GATEWAY_URL } },
+      },
+      'r1',
+    );
+    expect(ep.organizationUrl).toBe(ORGANIZATION_GATEWAY_URL);
     expect(ep.projectUrl).toBe(INTERNAL_URL);
   });
 
   it('adds implicit project visibility even if an older response omits it', () => {
-    const ep = toEnvEndpoint(bffEndpoint(['organization'], { internal: INTERNAL }), 'r1');
-    expect(ep.organizationUrl).toBe(INTERNAL_URL);
+    const ep = toEnvEndpoint(
+      {
+        ...bffEndpoint(['organization'], { internal: INTERNAL }),
+        visibilityStatus: { public: { status: 'DISABLED' as const }, organization: { status: 'ENABLED' as const, url: ORGANIZATION_GATEWAY_URL } },
+      },
+      'r1',
+    );
+    expect(ep.organizationUrl).toBe(ORGANIZATION_GATEWAY_URL);
     expect(ep.projectUrl).toBe(INTERNAL_URL);
+  });
+
+  it('shows Organization while its APIP deployment is enabling', () => {
+    const ep = toEnvEndpoint(
+      {
+        ...bffEndpoint(['project']),
+        visibilityStatus: { public: { status: 'DISABLED' as const }, organization: { status: 'ENABLING' as const } },
+      },
+      'r1',
+    );
+    expect(ep.networkVisibilities).toEqual(['Project', 'Organization']);
   });
 
   // An endpoint whose visibility has not reconciled yet must not render a blank card.

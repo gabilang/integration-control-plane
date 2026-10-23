@@ -144,12 +144,11 @@ function ManageEndpoint({ ep, componentId, projectId, versionId, releaseId, envi
       </Typography>
       <Stack gap={1} sx={{ mb: 2 }}>
         {VISIBILITY_OPTS.map(({ key, label, Icon, description }) => {
-          const unavailable = key === 'Organization';
           const checked = visibilities.includes(key);
           return (
             <Box
               key={key}
-              onClick={() => !unavailable && handleToggle(key)}
+              onClick={() => handleToggle(key)}
               sx={{
                 display: 'flex',
                 alignItems: 'flex-start',
@@ -158,7 +157,7 @@ function ManageEndpoint({ ep, componentId, projectId, versionId, releaseId, envi
                 border: '1px solid',
                 borderColor: checked ? 'primary.main' : 'divider',
                 borderRadius: 1,
-                cursor: unavailable ? 'default' : 'pointer',
+                cursor: 'pointer',
                 transition: 'border-color 0.15s',
                 '&:hover': { borderColor: 'primary.main' },
               }}>
@@ -170,10 +169,10 @@ function ManageEndpoint({ ep, componentId, projectId, versionId, releaseId, envi
                   {label}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  {unavailable ? 'Coming soon' : description}
+                  {description}
                 </Typography>
               </Box>
-              <Checkbox checked={checked} disabled={unavailable} size="small" sx={{ p: 0, flexShrink: 0, mt: 0.25 }} onClick={(e) => e.stopPropagation()} onChange={() => handleToggle(key)} />
+              <Checkbox checked={checked} size="small" sx={{ p: 0, flexShrink: 0, mt: 0.25 }} onClick={(e) => e.stopPropagation()} onChange={() => handleToggle(key)} />
             </Box>
           );
         })}

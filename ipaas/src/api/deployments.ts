@@ -93,11 +93,16 @@ export function toEnvEndpoint(ep: BffEndpointResources, releaseId: string): EnvE
   const displayProjectUrl = ep.displayProjectUrl !== false;
   const effectiveLabels = (ep.visibility ?? []).map(toVisibilityLabel).filter((label) => label !== 'Project');
   const publicStatus = ep.visibilityStatus?.public.status;
+  const organizationStatus = ep.visibilityStatus?.organization.status;
   if ((publicStatus === 'ENABLING' || publicStatus === 'ENABLED') && !effectiveLabels.includes('Public')) effectiveLabels.push('Public');
+  if ((organizationStatus === 'ENABLING' || organizationStatus === 'ENABLED') && !effectiveLabels.includes('Organization')) effectiveLabels.push('Organization');
   const networkVisibilities = Array.from(new Set([...(displayProjectUrl ? ['Project'] : []), ...effectiveLabels]));
   const publicUrl = buildUrl(ep.urls?.external);
   const internalUrl = buildUrl(ep.urls?.internal);
-  const organizationUrl = networkVisibilities.includes('Organization') ? internalUrl : '';
+  // The BFF resolves this from the environment's internal gateway host, not a urls.* field like
+  // publicUrl/projectUrl — organization has no OpenChoreo-level internal URL of its own, only an
+  // apip-gateway one, which only visibilityStatus carries.
+  const organizationUrl = ep.visibilityStatus?.organization.url ?? '';
   const projectUrl = displayProjectUrl ? internalUrl : '';
   return {
     id: ep.name,
@@ -113,7 +118,9 @@ export function toEnvEndpoint(ep: BffEndpointResources, releaseId: string): EnvE
     publicUrl,
     organizationUrl,
     projectUrl,
-    // Not organizationUrl: organization visibility needs to be implemented yet.
+    // The last-resort fallback once a caller has already checked publicUrl and organizationUrl
+    // itself (see utils/endpoints.ts's preference chain) — not organizationUrl, since this field
+    // is meant to always have something to show even when neither gateway tier is enabled.
     invokeUrl: publicUrl || internalUrl,
     // The swagger view reads activeEndpoint.apimRevisionId; there is no APIM, so carry
     // the base64 OpenAPI here for apim.ts#fetchApimSwagger to decode.
